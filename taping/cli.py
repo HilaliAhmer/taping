@@ -1,4 +1,5 @@
 import argparse
+import os
 import re
 import socket
 import subprocess
@@ -6,7 +7,7 @@ import sys
 import time
 
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 SERVICE_PORTS = {
     "http": 80,
@@ -20,6 +21,27 @@ SERVICE_PORTS = {
 }
 
 
+class Colors:
+    RESET = "\033[0m"
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    CYAN = "\033[96m"
+    WHITE = "\033[97m"
+    GRAY = "\033[90m"
+
+
+def supports_color():
+    return os.name == "nt" or sys.stdout.isatty()
+
+
+def color(text, color_code):
+    if not supports_color():
+        return str(text)
+
+    return f"{color_code}{text}{Colors.RESET}"
+
+
 def show_help():
     print(f"""
 TAPING v{VERSION} - Range ping and TCP port ping helper
@@ -30,13 +52,27 @@ Usage:
   taping 192.168.1.1 -p 80
   taping range 192.168.1.10-20 -p 443
 
+Paping-like loop mode:
+  taping 192.168.1.1 -p 443 --loop
+  taping 192.168.1.1 -p 443 -c 8
+
 Examples:
+  taping 8.8.8.8
+  taping 1.1.1.1 -p 443
   taping 212.154.103.165
   taping range 212.154.103.160-166
   taping 10.138.110.117 -p 9100
   taping range 10.138.110.100-120 -p 9100
   taping 192.168.1.10 --rdp
   taping 192.168.1.10 --zebra
+
+Options:
+  -p, --port <port>      TCP port check
+  -t, --timeout <ms>     Timeout in milliseconds. Default: 700
+  -c, --count <count>    Repeat count. Default: 1
+  --loop                 Run continuously until CTRL+C
+  --up                   Show only successful results
+  --version              Show version
 
 Notes:
   Normal ping uses ICMP and has no port concept.
@@ -99,30 +135,93 @@ def parse_ttl(output):
     match = re.search(r"ttl[=\s:]+(\d+)", output, re.IGNORECASE)
 
     if match:
-        return match.group(1)
+        return int(match.group(1))
 
     return None
 
 
 def parse_time_ms(output):
     patterns = [
-        r"time[=<]\s*(\d+)\s*ms",
-        r"süre[=<]\s*(\d+)\s*ms",
-        r"temps[=<]\s*(\d+)\s*ms",
+        r"time[=<]\s*(\d+(?:\.\d+)?)\s*ms",
+        r"süre[=<]\s*(\d+(?:\.\d+)?)\s*ms",
+        r"temps[=<]\s*(\d+(?:\.\d+)?)\s*ms",
     ]
 
     for pattern in patterns:
         match = re.search(pattern, output, re.IGNORECASE)
 
         if match:
-            return match.group(1)
+            return float(match.group(1))
 
     lower_output = output.lower()
 
     if "time<1ms" in lower_output or "süre<1ms" in lower_output:
-        return "<1"
+        return 0.0
 
     return None
+
+
+def format_ms(value):
+    if value is None:
+        return "0.00ms"
+
+    return f"{value:.2f}ms"
+
+
+def new_stats():
+    return {
+        "attempted": 0,
+        "connected": 0,
+        "failed": 0,
+        "times": []
+    }
+
+
+def add_stats(stats, success, time_ms):
+    stats["attempted"] += 1
+
+    if success:
+        stats["connected"] += 1
+
+        if time_ms is not None:
+            stats["times"].append(float(time_ms))
+    else:
+        stats["failed"] += 1
+
+
+def print_connection_statistics(stats):
+    attempted = stats["attempted"]
+    connected = stats["connected"]
+    failed = stats["failed"]
+
+    if attempted == 0:
+        failed_percent = 0.00
+    else:
+        failed_percent = (failed / attempted) * 100
+
+    if stats["times"]:
+        minimum = min(stats["times"])
+        maximum = max(stats["times"])
+        average = sum(stats["times"]) / len(stats["times"])
+    else:
+        minimum = 0.00
+        maximum = 0.00
+        average = 0.00
+
+    print("")
+    print("Connection statistics:")
+    print(
+        f"        Attempted = {color(attempted, Colors.CYAN)}, "
+        f"Connected = {color(connected, Colors.GREEN)}, "
+        f"Failed = {color(failed, Colors.RED)} "
+        f"({failed_percent:.2f}%)"
+    )
+    print("Approximate connection times:")
+    print(
+        f"        Minimum = {color(format_ms(minimum), Colors.CYAN)}, "
+        f"Maximum = {color(format_ms(maximum), Colors.CYAN)}, "
+        f"Average = {color(format_ms(average), Colors.CYAN)}"
+    )
 
 
 def icmp_ping(ip, timeout_ms):
@@ -137,32 +236,43 @@ def icmp_ping(ip, timeout_ms):
             timeout=(timeout_ms / 1000) + 2
         )
 
-        elapsed_ms = round((time.perf_counter() - start_time) * 1000)
+        elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
         output = (result.stdout or "") + "\n" + (result.stderr or "")
 
         ttl = parse_ttl(output)
         ping_time = parse_time_ms(output)
 
+        if ping_time is None:
+            ping_time = elapsed_ms
+
         if result.returncode == 0:
-            time_text = f"{ping_time} ms" if ping_time else f"{elapsed_ms} ms"
+            ip_text = color(f"{ip:<18}", Colors.GREEN)
+            status_text = color("UP", Colors.GREEN)
+            time_text = color(format_ms(ping_time), Colors.CYAN)
 
-            if ttl:
-                print(f"{ip:<18} UP       {time_text} TTL={ttl}")
+            if ttl is not None:
+                print(f"{ip_text} {status_text:<12} {time_text} TTL={ttl}")
             else:
-                print(f"{ip:<18} UP       {time_text}")
+                print(f"{ip_text} {status_text:<12} {time_text}")
 
-            return True
+            return True, ping_time
 
-        print(f"{ip:<18} DOWN     No reply")
-        return False
+        ip_text = color(f"{ip:<18}", Colors.RED)
+        status_text = color("DOWN", Colors.RED)
+        print(f"{ip_text} {status_text:<12} No reply")
+        return False, None
 
     except subprocess.TimeoutExpired:
-        print(f"{ip:<18} TIMEOUT  Ping timeout")
-        return False
+        ip_text = color(f"{ip:<18}", Colors.RED)
+        status_text = color("TIMEOUT", Colors.RED)
+        print(f"{ip_text} {status_text:<12} Ping timeout")
+        return False, None
 
     except Exception as error:
-        print(f"{ip:<18} ERROR    {error}")
-        return False
+        ip_text = color(f"{ip:<18}", Colors.RED)
+        status_text = color("ERROR", Colors.RED)
+        print(f"{ip_text} {status_text:<12} {error}")
+        return False, None
 
 
 def tcp_ping(ip, port, timeout_ms):
@@ -170,21 +280,28 @@ def tcp_ping(ip, port, timeout_ms):
 
     try:
         with socket.create_connection((ip, port), timeout=timeout_ms / 1000):
-            elapsed_ms = round((time.perf_counter() - start_time) * 1000)
-            print(f"{ip:<18}:{port:<5} OPEN     {elapsed_ms} ms")
-            return True
+            elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+            print(
+                f"Connected to {color(ip, Colors.GREEN)}: "
+                f"time={color(format_ms(elapsed_ms), Colors.CYAN)} "
+                f"protocol={color('TCP', Colors.GREEN)} "
+                f"port={color(port, Colors.GREEN)}"
+            )
+
+            return True, elapsed_ms
 
     except socket.timeout:
-        print(f"{ip:<18}:{port:<5} TIMEOUT  Connection timed out")
-        return False
+        print(color("Connection timed out", Colors.RED))
+        return False, None
 
     except ConnectionRefusedError:
-        print(f"{ip:<18}:{port:<5} CLOSED   Connection refused")
-        return False
+        print(color("Connection refused", Colors.RED))
+        return False, None
 
     except Exception as error:
-        print(f"{ip:<18}:{port:<5} ERROR    {error}")
-        return False
+        print(color(str(error), Colors.RED))
+        return False, None
 
 
 def get_service_port(args):
@@ -206,13 +323,33 @@ def get_service_port(args):
     return args.port
 
 
+def print_header(target_text, port):
+    if port:
+        print(
+            f"Connecting to {color(target_text, Colors.YELLOW)} "
+            f"on {color('TCP', Colors.YELLOW)} {color(port, Colors.YELLOW)}:"
+        )
+    else:
+        print(
+            f"Pinging {color(target_text, Colors.YELLOW)} "
+            f"using {color('ICMP', Colors.YELLOW)}:"
+        )
+
+    print("")
+
+
 def main():
+    os.system("")
+
     parser = argparse.ArgumentParser(add_help=False)
 
     parser.add_argument("target", nargs="?")
     parser.add_argument("value", nargs="?")
     parser.add_argument("-p", "--port", type=int)
     parser.add_argument("-t", "--timeout", type=int, default=700)
+    parser.add_argument("-c", "--count", type=int, default=1)
+    parser.add_argument("--loop", action="store_true")
+    parser.add_argument("--up", action="store_true")
     parser.add_argument("--version", action="store_true")
 
     parser.add_argument("--http", action="store_true")
@@ -238,6 +375,10 @@ def main():
         print("Timeout minimum 100 ms olmalı.")
         return 1
 
+    if args.count < 1:
+        print("Count minimum 1 olmalı.")
+        return 1
+
     try:
         port = get_service_port(args)
     except ValueError as error:
@@ -257,9 +398,11 @@ def main():
                 return 1
 
             targets = parse_range(args.value)
+            target_text = args.value
 
         else:
             targets = [args.target]
+            target_text = args.target
 
             if not is_valid_ip(args.target):
                 print("Hatalı IP adresi.")
@@ -269,18 +412,41 @@ def main():
         print(error)
         return 1
 
-    success_count = 0
+    stats = new_stats()
 
-    for ip in targets:
-        if port:
-            success = tcp_ping(ip, port, args.timeout)
+    print_header(target_text, port)
+
+    try:
+        if args.loop:
+            while True:
+                for ip in targets:
+                    if port:
+                        success, time_ms = tcp_ping(ip, port, args.timeout)
+                    else:
+                        success, time_ms = icmp_ping(ip, args.timeout)
+
+                    add_stats(stats, success, time_ms)
+
+                time.sleep(1)
+
         else:
-            success = icmp_ping(ip, args.timeout)
+            for _ in range(args.count):
+                for ip in targets:
+                    if port:
+                        success, time_ms = tcp_ping(ip, port, args.timeout)
+                    else:
+                        success, time_ms = icmp_ping(ip, args.timeout)
 
-        if success:
-            success_count += 1
+                    add_stats(stats, success, time_ms)
 
-    if success_count > 0:
+    except KeyboardInterrupt:
+        print("")
+        print(color("Break received. Stopping...", Colors.YELLOW))
+
+    finally:
+        print_connection_statistics(stats)
+
+    if stats["connected"] > 0:
         return 0
 
     return 2
