@@ -102,6 +102,12 @@ taping 8.8.8.8
 taping 1.1.1.1 -p 443
 ```
 
+## Upgrade
+
+To upgrade TAPING to the latest version from GitHub:
+
+```powershell
+py -m pip install --user --upgrade --force-reinstall git+https://github.com/HilaliAhmer/taping.git
 
 ## Usage
 
