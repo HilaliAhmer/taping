@@ -18,5 +18,5 @@ It helps you test a single IP, an IP range, or a TCP port without memorizing lon
 Clone the repository:
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/taping.git
+git clone https://github.com/HilaliAhmer/taping.git
 cd taping
