@@ -7,7 +7,7 @@ import sys
 import time
 
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 SERVICE_PORTS = {
     "http": 80,
@@ -276,6 +276,94 @@ def icmp_ping(ip, timeout_ms):
 
 
 def tcp_ping(ip, port, timeout_ms):
+    start_time = time.perf_counter()
+
+    target_text = f"{ip}:{port}"
+
+    try:
+        with socket.create_connection((ip, port), timeout=timeout_ms / 1000):
+            elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+            print(
+                f"{color(f'{target_text:<24}', Colors.GREEN)} "
+                f"{color('OPEN', Colors.GREEN):<12} "
+                f"time={color(format_ms(elapsed_ms), Colors.CYAN)} "
+                f"protocol={color('TCP', Colors.GREEN)} "
+                f"port={color(port, Colors.GREEN)}"
+            )
+
+            return True, elapsed_ms
+
+    except socket.timeout:
+        print(
+            f"{color(f'{target_text:<24}', Colors.RED)} "
+            f"{color('TIMEOUT', Colors.RED):<12} "
+            f"Connection timed out"
+        )
+        return False, None
+
+    except ConnectionRefusedError:
+        elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+        print(
+            f"{color(f'{target_text:<24}', Colors.RED)} "
+            f"{color('CLOSED', Colors.RED):<12} "
+            f"Connection refused "
+            f"time={color(format_ms(elapsed_ms), Colors.CYAN)}"
+        )
+        return False, elapsed_ms
+
+    except Exception as error:
+        print(
+            f"{color(f'{target_text:<24}', Colors.RED)} "
+            f"{color('ERROR', Colors.RED):<12} "
+            f"{error}"
+        )
+        return False, None
+    start_time = time.perf_counter()
+
+    target_text = f"{ip}:{port}"
+
+    try:
+        with socket.create_connection((ip, port), timeout=timeout_ms / 1000):
+            elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+            print(
+                f"{color(f'{target_text:<24}', Colors.GREEN)} "
+                f"{color('OPEN', Colors.GREEN):<12} "
+                f"time={color(format_ms(elapsed_ms), Colors.CYAN)} "
+                f"protocol={color('TCP', Colors.GREEN)} "
+                f"port={color(port, Colors.GREEN)}"
+            )
+
+            return True, elapsed_ms
+
+    except socket.timeout:
+        print(
+            f"{color(f'{target_text:<24}', Colors.RED)} "
+            f"{color('TIMEOUT', Colors.RED):<12} "
+            f"Connection timed out"
+        )
+        return False, None
+
+    except ConnectionRefusedError:
+        elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+        print(
+            f"{color(f'{target_text:<24}', Colors.RED)} "
+            f"{color('CLOSED', Colors.RED):<12} "
+            f"Connection refused "
+            f"time={color(format_ms(elapsed_ms), Colors.CYAN)}"
+        )
+        return False, elapsed_ms
+
+    except Exception as error:
+        print(
+            f"{color(f'{target_text:<24}', Colors.RED)} "
+            f"{color('ERROR', Colors.RED):<12} "
+            f"{error}"
+        )
+        return False, None
     start_time = time.perf_counter()
 
     try:
