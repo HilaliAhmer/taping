@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taping"
+version = "0.1.0"
+description = "Tiny range ping and TCP port ping helper for Windows"
+requires-python = ">=3.9"
+readme = "README.md"
+license = "MIT"
+authors = [
+  { name = "Selahattin Acikgoz" }
+]
+keywords = ["ping", "tcp", "port", "network", "cli", "windows"]
+
+[project.scripts]
+taping = "taping.cli:main"
