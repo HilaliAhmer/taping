@@ -31,21 +31,77 @@ or:
 python --version
 ```
 
-## Quick Installation from GitHub
+## Installation
 
-Install the latest version directly from GitHub:
+### Quick install from GitHub
+
+Install TAPING directly from GitHub:
 
 ```powershell
 py -m pip install --user git+https://github.com/HilaliAhmer/taping.git
 ```
 
-Close and reopen CMD or PowerShell.
-
-Test the command:
+Close and reopen CMD or PowerShell, then test:
 
 ```powershell
 taping help
 ```
+
+### If `taping` is not recognized
+
+If installation succeeds but Windows says `taping` is not recognized, the Python user Scripts folder is probably not in your PATH.
+
+Run this in PowerShell:
+
+```powershell
+$ScriptsPath = py -c "import site, pathlib; print(pathlib.Path(site.USER_BASE) / 'Scripts')"
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+if ($UserPath -notlike "*$ScriptsPath*") {
+    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$ScriptsPath", "User")
+}
+
+$env:Path += ";$ScriptsPath"
+```
+
+Then test again:
+
+```powershell
+taping help
+```
+
+If it still does not work, close and reopen CMD or PowerShell.
+
+## Developer Installation
+
+Clone the repository:
+
+```powershell
+git clone https://github.com/HilaliAhmer/taping.git
+cd taping
+```
+
+Create a virtual environment:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install in editable mode:
+
+```powershell
+python -m pip install -e .
+```
+
+Test:
+
+```powershell
+taping help
+taping 8.8.8.8
+taping 1.1.1.1 -p 443
+```
+
 
 ## Usage
 
