@@ -17,34 +17,46 @@ It helps you test a single IP address, an IP range, or a TCP port without memori
 
 * Windows
 * Python 3.9 or newer
-* Git, only required when installing directly from GitHub
 
 Check Python:
-
-```powershell
-py --version
-```
-
-or:
 
 ```powershell
 python --version
 ```
 
+or:
+
+```powershell
+py --version
+```
+
+
 ## Installation
 
 ### Quick install from GitHub
 
-Install TAPING directly from GitHub:
+Install TAPING directly from GitHub without requiring Git:
 
 ```powershell
-py -m pip install --user git+https://github.com/HilaliAhmer/taping.git
+python -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
+```
+
+If your system uses the Python launcher, this also works:
+
+```powershell
+py -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
 ```
 
 Close and reopen CMD or PowerShell, then test:
 
 ```powershell
 taping help
+```
+
+or:
+
+```powershell
+taping -help
 ```
 
 ### If `taping` is not recognized
@@ -54,7 +66,13 @@ If installation succeeds but Windows says `taping` is not recognized, the Python
 Run this in PowerShell:
 
 ```powershell
-$ScriptsPath = py -c "import site, pathlib; print(pathlib.Path(site.USER_BASE) / 'Scripts')"
+$ScriptsPath = python -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='nt_user'))"
+
+Write-Host "Python Scripts Path:"
+Write-Host $ScriptsPath
+
+dir "$ScriptsPath\taping*"
+
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 
 if ($UserPath -notlike "*$ScriptsPath*") {
@@ -70,36 +88,28 @@ Then test again:
 taping help
 ```
 
+or:
+
+```powershell
+taping -help
+```
+
 If it still does not work, close and reopen CMD or PowerShell.
 
-## Developer Installation
+### Temporary workaround
 
-Clone the repository:
+If TAPING is installed but the `taping` command is still not recognized, you can run it directly through Python:
 
 ```powershell
-git clone https://github.com/HilaliAhmer/taping.git
-cd taping
+python -m taping.cli help
 ```
 
-Create a virtual environment:
+Example:
 
 ```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-Install in editable mode:
-
-```powershell
-python -m pip install -e .
-```
-
-Test:
-
-```powershell
-taping help
-taping 8.8.8.8
-taping 1.1.1.1 -p 443
+python -m taping.cli 8.8.8.8
+python -m taping.cli 1.1.1.1 -p 443
+python -m taping.cli range 192.168.1.10-20
 ```
 
 ## Upgrade
@@ -107,8 +117,15 @@ taping 1.1.1.1 -p 443
 To upgrade TAPING to the latest version from GitHub:
 
 ```powershell
-py -m pip install --user --upgrade --force-reinstall git+https://github.com/HilaliAhmer/taping.git
+python -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
 ```
+
+or:
+
+```powershell
+py -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
+```
+
 
 ## Usage
 
@@ -232,21 +249,74 @@ taping 1.1.1.1 -p 443
 
 ### `taping` is not recognized
 
-If Windows says `taping` is not recognized after installation, the Python Scripts folder may not be in your PATH.
-
-Find your Python user base path:
+If Windows says `taping` is not recognized after installation, find the correct Python Scripts folder with:
 
 ```powershell
-py -m site --user-base
+python -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='nt_user'))"
 ```
 
-The Scripts folder is usually similar to:
+The output is usually similar to:
 
 ```text
 C:\Users\<YourUser>\AppData\Roaming\Python\Python312\Scripts
 ```
 
-Add that `Scripts` folder to your user PATH, then close and reopen CMD or PowerShell.
+Add that folder to your user PATH, then close and reopen CMD or PowerShell.
+
+You can also add it automatically with:
+
+```powershell
+$ScriptsPath = python -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='nt_user'))"
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+if ($UserPath -notlike "*$ScriptsPath*") {
+    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$ScriptsPath", "User")
+}
+
+$env:Path += ";$ScriptsPath"
+```
+
+Then test:
+
+```powershell
+taping help
+```
+
+### TAPING is installed but PATH is still not working
+
+Run TAPING directly through Python:
+
+```powershell
+python -m taping.cli help
+```
+
+Example:
+
+```powershell
+python -m taping.cli 8.8.8.8
+python -m taping.cli 1.1.1.1 -p 443
+```
+
+### PowerShell blocks virtual environment activation
+
+If this command fails:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Run:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Then try again:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
 
 ### PowerShell blocks virtual environment activation
 
@@ -295,8 +365,15 @@ That command checks TCP/161, not UDP/161.
 If installed from GitHub with pip:
 
 ```powershell
+python -m pip uninstall taping
+```
+
+or:
+
+```powershell
 py -m pip uninstall taping
 ```
+
 
 ## License
 
