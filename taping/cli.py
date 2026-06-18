@@ -7,7 +7,7 @@ import sys
 import time
 
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 SERVICE_PORTS = {
     "http": 80,
@@ -44,6 +44,74 @@ def color(text, color_code):
 
 def show_help():
     print(f"""
+taping v{VERSION} - Copyright (c) 2026 Selahattin Acikgoz
+
+TAPING helps you quickly check ICMP reachability and TCP port connectivity
+for a single IP address or an IP range.
+
+Syntax:
+  taping [options] destination
+  taping range <start-end> [options]
+
+Basic usage:
+  taping 192.168.1.1
+  taping range 192.168.1.10-20
+  taping 192.168.1.1 -p 443
+  taping range 192.168.1.10-20 -p 3389
+
+Options:
+  -?, /?, -h, -help, --help
+        Display this help screen
+
+  -p, --port PORT
+        Set TCP port to check.
+        Example: taping 192.168.1.1 -p 443
+
+  -t, --timeout MS
+        Set timeout in milliseconds.
+        Default: 700
+
+  -c, --count COUNT
+        Set number of checks.
+        Default: 1
+        Example: taping 192.168.1.1 -p 443 -c 5
+
+  --loop
+        Run continuously until CTRL+C.
+        Example: taping 192.168.1.1 -p 443 --loop
+
+  --up
+        Show only successful results
+
+  --version
+        Show TAPING version
+
+Service shortcuts:
+  --http      TCP 80
+  --https     TCP 443
+  --ssh       TCP 22
+  --rdp       TCP 3389
+  --smb       TCP 445
+  --zebra     TCP 9100
+  --winrm     TCP 5985
+  --winrms    TCP 5986
+
+Examples:
+  taping 8.8.8.8
+  taping 1.1.1.1 -p 443
+  taping 192.168.10.36 --rdp
+  taping 192.168.110.117 --zebra
+  taping range 192.168.70.160-169
+  taping range 192.168.70.160-169 -p 3389
+  taping range 192.168.70.160-169 -p 3389 -c 3
+  taping range 192.168.70.160-169 -p 3389 --loop
+
+Notes:
+  ICMP ping does not use ports.
+  TCP port mode works similar to paping.
+  SNMP usually uses UDP 161, so "-p 161" checks TCP/161, not SNMP.
+""")
+    print(f"""
 TAPING v{VERSION} - Range ping and TCP port ping helper
 
 Usage:
@@ -59,10 +127,10 @@ Paping-like loop mode:
 Examples:
   taping 8.8.8.8
   taping 1.1.1.1 -p 443
-  taping 212.154.103.165
-  taping range 212.154.103.160-166
-  taping 10.138.110.117 -p 9100
-  taping range 10.138.110.100-120 -p 9100
+  taping 202.202.202.1
+  taping range 202.202.202.1-166
+  taping 192.168.110.117 -p 9100
+  taping range 192.168.110.100-120 -p 9100
   taping 192.168.1.10 --rdp
   taping 192.168.1.10 --zebra
 
@@ -433,6 +501,9 @@ def main():
 
     parser.add_argument("target", nargs="?")
     parser.add_argument("value", nargs="?")
+
+    parser.add_argument("-?", "-h", "-help", "--help", action="store_true", dest="help_flag")
+
     parser.add_argument("-p", "--port", type=int)
     parser.add_argument("-t", "--timeout", type=int, default=700)
     parser.add_argument("-c", "--count", type=int, default=1)
@@ -455,7 +526,7 @@ def main():
         print(f"taping {VERSION}")
         return 0
 
-    if not args.target or args.target.lower() in ["help", "/?", "-h", "--help"]:
+    if args.help_flag or not args.target or args.target.lower() in ["help", "/?"]:
         show_help()
         return 0
 
