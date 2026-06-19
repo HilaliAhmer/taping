@@ -1,13 +1,20 @@
 $ErrorActionPreference = "Stop"
 
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Green
+Write-Host " TAPING installer started" -ForegroundColor Green
+Write-Host " Please wait, installation is running..." -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Green
+Write-Host ""
+
 $InstallDir = "C:\taping"
 $ZipUrl = "https://github.com/HilaliAhmer/taping/releases/latest/download/taping-windows-x64.zip"
 $TempRoot = Join-Path $env:TEMP ("taping-install-" + [guid]::NewGuid().ToString())
 $TempZip = Join-Path $TempRoot "taping-windows-x64.zip"
 $TempExtract = Join-Path $TempRoot "extract"
 
-Write-Host "Installing TAPING..."
-Write-Host "Install directory: $InstallDir"
+Write-Host "Installing TAPING..." -ForegroundColor Green
+Write-Host "Install directory: $InstallDir" -ForegroundColor Cyan
 
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -24,10 +31,10 @@ try {
         throw
     }
 
-    Write-Host "Downloading latest TAPING release..."
+    Write-Host "Downloading latest TAPING release. This may take a few seconds..." -ForegroundColor Yellow
     Invoke-WebRequest -Uri $ZipUrl -OutFile $TempZip -UseBasicParsing
 
-    Write-Host "Extracting package..."
+    Write-Host "Extracting package..." -ForegroundColor Yellow
     Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
 
     $PackageDir = Join-Path $TempExtract "taping"
