@@ -15,14 +15,21 @@ It helps you test a single IP address, an IP range, or a TCP port without memori
 * Standalone Windows EXE installation
 * Python developer installation
 
-## Recommended Installation
+## Installation Options
+
+TAPING can be installed in two different ways:
+
+* **Normal users:** use the standalone Windows EXE installation. Python, pip and Git are not required.
+* **Developers:** use the Python developer installation if you want to modify or test the source code.
+
+## Recommended Installation for Normal Users
 
 This method installs the standalone Windows EXE. Python, pip and Git are not required.
 
 Open PowerShell and run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-RestMethod https://github.com/HilaliAhmer/taping/releases/latest/download/install.ps1 | Invoke-Expression"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ((New-Object Net.WebClient).DownloadString('https://github.com/HilaliAhmer/taping/releases/latest/download/install.ps1'))"
 ```
 
 The installer will:
@@ -30,6 +37,11 @@ The installer will:
 * download the latest `taping-windows-x64.zip` release
 * install TAPING under `C:\taping`
 * add `C:\taping` to your user PATH
+* run a quick TAPING test at the end
+
+> Note: The installation may take a few seconds depending on your internet connection.
+> Please wait until you see `TAPING installed successfully.`
+> Do not close PowerShell or press `CTRL+C` during installation.
 
 After installation, close and reopen CMD or PowerShell, then test:
 
@@ -37,7 +49,15 @@ After installation, close and reopen CMD or PowerShell, then test:
 taping help
 ```
 
-## Manual Installation
+Example usage:
+
+```cmd
+taping 8.8.8.8
+taping range 192.168.1.1-100
+taping 1.1.1.1 -p 443
+```
+
+## Manual Standalone Installation
 
 Download `taping-windows-x64.zip` from the latest GitHub Release.
 
@@ -103,6 +123,12 @@ Show project information:
 taping about
 ```
 
+Show version:
+
+```cmd
+taping --version
+```
+
 ## Examples
 
 ```cmd
@@ -147,6 +173,18 @@ SSH:
 taping 192.168.1.10 --ssh
 ```
 
+WinRM:
+
+```cmd
+taping 192.168.1.10 --winrm
+```
+
+WinRM over HTTPS:
+
+```cmd
+taping 192.168.1.10 --winrms
+```
+
 Zebra printer RAW port:
 
 ```cmd
@@ -168,12 +206,13 @@ Shortcut mapping:
 
 ## Developer Installation
 
-Use this method only if you want to develop or modify the Python source code.
+Use this method if you want to develop, modify or test the Python source code.
 
 Requirements:
 
 * Windows
 * Python 3.9 or newer
+* pip
 * Git
 
 Clone the repository:
@@ -190,7 +229,7 @@ py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-Install in editable mode:
+Install TAPING in editable mode:
 
 ```powershell
 python -m pip install -e .
@@ -200,11 +239,16 @@ Test:
 
 ```powershell
 taping help
+taping about
 taping 8.8.8.8
 taping 1.1.1.1 -p 443
 ```
 
+When you edit the source code, the `taping` command will use your local development version.
+
 ## Build Standalone Windows Release
+
+Use this method only when preparing a new Windows release package.
 
 Activate your virtual environment first:
 
@@ -224,24 +268,34 @@ Build the release package:
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-The release files will be created under:
+The release package will be created under:
 
 ```text
 release\
+```
+
+Test the generated executable:
+
+```powershell
+.\release\taping\taping.exe help
+.\release\taping\taping.exe 8.8.8.8
+.\release\taping\taping.exe 1.1.1.1 -p 443
 ```
 
 Upload these files to GitHub Releases:
 
 ```text
 release\taping-windows-x64.zip
-release\install.ps1
+scripts\install.ps1
 ```
 
 ## Optional Python Package Installation
 
-This method is for users who prefer Python/pip instead of the standalone EXE.
+Use this method if you want to install TAPING with Python and pip, but you do not want to clone the repository manually.
 
-Install directly from GitHub without requiring Git:
+Python and pip are required. Git is not required.
+
+Install directly from GitHub:
 
 ```powershell
 python -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
@@ -251,6 +305,12 @@ If your system uses the Python launcher, this also works:
 
 ```powershell
 py -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
+```
+
+Then test:
+
+```powershell
+taping help
 ```
 
 If `taping` is not recognized after pip installation, run it directly through Python:
