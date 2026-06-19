@@ -13,6 +13,25 @@ authors = [
   { name = "Selahattin Acikgoz" }
 ]
 keywords = ["ping", "tcp", "port", "network", "cli", "windows"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: System :: Networking",
+  "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/HilaliAhmer/taping"
+Repository = "https://github.com/HilaliAhmer/taping"
+Issues = "https://github.com/HilaliAhmer/taping/issues"
 
 [project.scripts]
 taping = "taping.cli:main"

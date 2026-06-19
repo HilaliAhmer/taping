@@ -1,6 +1,6 @@
 # TAPING
 
-TAPING is a tiny command-line tool for quick ICMP ping and TCP port checks.
+TAPING is a tiny Windows command-line tool for quick ICMP ping and TCP port checks.
 
 It helps you test a single IP address, an IP range, or a TCP port without memorizing long CMD or PowerShell loops.
 
@@ -11,121 +11,53 @@ It helps you test a single IP address, an IP range, or a TCP port without memori
 * TCP port check
 * TCP port check for IP ranges
 * Simple CMD and PowerShell usage
-* Service shortcuts like RDP, HTTP, HTTPS, SMB and Zebra printer port
+* Service shortcuts like RDP, HTTP, HTTPS, SMB, WinRM and Zebra printer RAW port
+* Standalone Windows EXE installation
+* Python developer installation
 
-## Requirements
+## Recommended Installation
 
-* Windows
-* Python 3.9 or newer
+This method installs the standalone Windows EXE. Python, pip and Git are not required.
 
-Check Python:
+Open PowerShell and run:
 
 ```powershell
-python --version
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-RestMethod https://github.com/HilaliAhmer/taping/releases/latest/download/install.ps1 | Invoke-Expression"
 ```
 
-or:
+The installer will:
 
-```powershell
-py --version
-```
+* download the latest `taping-windows-x64.zip` release
+* install TAPING under `C:\taping`
+* add `C:\taping` to your user PATH
 
+After installation, close and reopen CMD or PowerShell, then test:
 
-## Installation
-
-### Quick install from GitHub
-
-Install TAPING directly from GitHub without requiring Git:
-
-```powershell
-python -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
-```
-
-If your system uses the Python launcher, this also works:
-
-```powershell
-py -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
-```
-
-Close and reopen CMD or PowerShell, then test:
-
-```powershell
+```cmd
 taping help
 ```
 
-or:
+## Manual Installation
 
-```powershell
-taping -help
+Download `taping-windows-x64.zip` from the latest GitHub Release.
+
+Extract it so the final folder is:
+
+```text
+C:\taping
 ```
 
-### If `taping` is not recognized
+The executable should be here:
 
-If installation succeeds but Windows says `taping` is not recognized, the Python user Scripts folder is probably not in your PATH.
-
-Run this in PowerShell:
-
-```powershell
-$ScriptsPath = python -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='nt_user'))"
-
-Write-Host "Python Scripts Path:"
-Write-Host $ScriptsPath
-
-dir "$ScriptsPath\taping*"
-
-$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-
-if ($UserPath -notlike "*$ScriptsPath*") {
-    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$ScriptsPath", "User")
-}
-
-$env:Path += ";$ScriptsPath"
+```text
+C:\taping\taping.exe
 ```
 
-Then test again:
+Add `C:\taping` to your user PATH, then open a new CMD or PowerShell window and run:
 
-```powershell
+```cmd
 taping help
 ```
-
-or:
-
-```powershell
-taping -help
-```
-
-If it still does not work, close and reopen CMD or PowerShell.
-
-### Temporary workaround
-
-If TAPING is installed but the `taping` command is still not recognized, you can run it directly through Python:
-
-```powershell
-python -m taping.cli help
-```
-
-Example:
-
-```powershell
-python -m taping.cli 8.8.8.8
-python -m taping.cli 1.1.1.1 -p 443
-python -m taping.cli range 192.168.1.10-20
-```
-
-## Upgrade
-
-To upgrade TAPING to the latest version from GitHub:
-
-```powershell
-python -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
-```
-
-or:
-
-```powershell
-py -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
-```
-
 
 ## Usage
 
@@ -153,6 +85,24 @@ Check a TCP port on an IP range:
 taping range 192.168.1.10-20 -p 443
 ```
 
+Show only successful results:
+
+```cmd
+taping range 192.168.1.10-20 --up
+```
+
+Run continuously until CTRL+C:
+
+```cmd
+taping 192.168.1.1 -p 443 --loop
+```
+
+Show project information:
+
+```cmd
+taping about
+```
+
 ## Examples
 
 ```cmd
@@ -162,6 +112,7 @@ taping 212.154.103.165
 taping range 212.154.103.160-166
 taping 10.138.110.117 -p 9100
 taping range 10.138.110.100-120 -p 9100
+taping range 192.168.1.1-100 --rdp
 ```
 
 ## Service Shortcuts
@@ -217,6 +168,14 @@ Shortcut mapping:
 
 ## Developer Installation
 
+Use this method only if you want to develop or modify the Python source code.
+
+Requirements:
+
+* Windows
+* Python 3.9 or newer
+* Git
+
 Clone the repository:
 
 ```powershell
@@ -245,35 +204,92 @@ taping 8.8.8.8
 taping 1.1.1.1 -p 443
 ```
 
+## Build Standalone Windows Release
+
+Activate your virtual environment first:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Install PyInstaller:
+
+```powershell
+python -m pip install --upgrade pyinstaller
+```
+
+Build the release package:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
+```
+
+The release files will be created under:
+
+```text
+release\
+```
+
+Upload these files to GitHub Releases:
+
+```text
+release\taping-windows-x64.zip
+release\install.ps1
+```
+
+## Optional Python Package Installation
+
+This method is for users who prefer Python/pip instead of the standalone EXE.
+
+Install directly from GitHub without requiring Git:
+
+```powershell
+python -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
+```
+
+If your system uses the Python launcher, this also works:
+
+```powershell
+py -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
+```
+
+If `taping` is not recognized after pip installation, run it directly through Python:
+
+```powershell
+python -m taping.cli help
+```
+
 ## Troubleshooting
 
 ### `taping` is not recognized
 
-If Windows says `taping` is not recognized after installation, find the correct Python Scripts folder with:
+If the standalone installer completed successfully but Windows says `taping` is not recognized, close and reopen CMD or PowerShell.
 
-```powershell
-python -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='nt_user'))"
-```
-
-The output is usually similar to:
+If it still does not work, check that this folder exists:
 
 ```text
-C:\Users\<YourUser>\AppData\Roaming\Python\Python312\Scripts
+C:\taping
 ```
 
-Add that folder to your user PATH, then close and reopen CMD or PowerShell.
+Then check that this file exists:
 
-You can also add it automatically with:
+```text
+C:\taping\taping.exe
+```
+
+Finally, confirm `C:\taping` is in your user PATH.
+
+You can add it manually with PowerShell:
 
 ```powershell
-$ScriptsPath = python -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='nt_user'))"
+$InstallDir = "C:\taping"
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 
-if ($UserPath -notlike "*$ScriptsPath*") {
-    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$ScriptsPath", "User")
+if ($UserPath -notlike "*$InstallDir*") {
+    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
 }
 
-$env:Path += ";$ScriptsPath"
+$env:Path += ";$InstallDir"
 ```
 
 Then test:
@@ -282,43 +298,13 @@ Then test:
 taping help
 ```
 
-### TAPING is installed but PATH is still not working
+### Cannot create `C:\taping`
 
-Run TAPING directly through Python:
-
-```powershell
-python -m taping.cli help
-```
-
-Example:
-
-```powershell
-python -m taping.cli 8.8.8.8
-python -m taping.cli 1.1.1.1 -p 443
-```
+If the installer cannot create `C:\taping`, run PowerShell as Administrator and try again.
 
 ### PowerShell blocks virtual environment activation
 
-If this command fails:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-Run:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-Then try again:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-
-### PowerShell blocks virtual environment activation
+This applies only to developer installation.
 
 If this command fails:
 
@@ -362,7 +348,15 @@ That command checks TCP/161, not UDP/161.
 
 ## Uninstall
 
-If installed from GitHub with pip:
+If installed with the standalone installer, remove the folder:
+
+```powershell
+Remove-Item C:\taping -Recurse -Force
+```
+
+Then remove `C:\taping` from your user PATH.
+
+If installed with pip:
 
 ```powershell
 python -m pip uninstall taping
@@ -374,7 +368,20 @@ or:
 py -m pip uninstall taping
 ```
 
+## Original Project Notice
+
+TAPING is created and maintained by Selahattin Açıkgöz / HilaliAhmer.
+
+Original project:
+
+```text
+https://github.com/HilaliAhmer/taping
+```
+
+If you copy, modify, distribute, or use substantial parts of this project, keep the original copyright and license notice.
 
 ## License
 
 This project is licensed under the MIT License.
+
+Copyright (c) 2026 Selahattin Açıkgöz
