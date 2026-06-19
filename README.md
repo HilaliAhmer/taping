@@ -295,6 +295,35 @@ Use this method if you want to install TAPING with Python and pip, but you do no
 
 Python and pip are required. Git is not required.
 
+Install or upgrade directly from GitHub:
+
+```powershell
+python -m pip install --no-cache-dir --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
+```
+
+If your system uses the Python launcher, this also works:
+
+```powershell
+py -m pip install --no-cache-dir --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
+```
+
+Then test:
+
+```powershell
+taping help
+```
+
+If `taping` is not recognized after pip installation, run it directly through Python:
+
+```powershell
+python -m taping.cli help
+```
+
+
+Use this method if you want to install TAPING with Python and pip, but you do not want to clone the repository manually.
+
+Python and pip are required. Git is not required.
+
 Install directly from GitHub:
 
 ```powershell
