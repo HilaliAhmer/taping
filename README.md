@@ -1,6 +1,6 @@
 # TAPING
 
-TAPING is a tiny Windows command-line tool for quick ICMP ping and TCP port checks.
+TAPING is a small Windows command-line tool for quick ICMP ping and TCP port checks.
 
 It helps you test a single IP address, an IP range, or a TCP port without memorizing long CMD or PowerShell loops.
 
@@ -10,21 +10,33 @@ It helps you test a single IP address, an IP range, or a TCP port without memori
 * IP range ping
 * TCP port check
 * TCP port check for IP ranges
-* Simple CMD and PowerShell usage
-* Service shortcuts like RDP, HTTP, HTTPS, SMB, WinRM and Zebra printer RAW port
+* Service shortcuts for common ports
+* `--up` mode to show only successful results
+* `--loop` mode for continuous checks
 * Standalone Windows EXE installation
-* Python developer installation
+* Optional Python/pip installation for technical users
+* Developer workflow for modifying the source code
 
-## Installation Options
+## Installation
 
-TAPING can be installed in two different ways:
+TAPING can be installed in two ways.
 
-* **Normal users:** use the standalone Windows EXE installation. Python, pip and Git are not required.
-* **Developers:** use the Python developer installation if you want to modify or test the source code.
+| Method         | Best for                      | Requires Python? | Requires Git? |
+| -------------- | ----------------------------- | ---------------: | ------------: |
+| Standalone EXE | Regular usage                 |               No |            No |
+| Python/pip     | Technical users or developers |              Yes |            No |
 
 ## Standalone EXE Installation
 
-This method installs the standalone Windows EXE. Python, pip and Git are not required.
+This is the recommended method for most users.
+
+It installs TAPING under:
+
+```text
+C:\taping
+```
+
+Python, pip and Git are not required.
 
 Open PowerShell and run:
 
@@ -36,11 +48,11 @@ The installer will:
 
 * download the latest `taping-windows-x64.zip` release
 * install TAPING under `C:\taping`
-* add `C:\taping` to your user PATH
+* add `C:\taping` to the user PATH
 * run a quick TAPING test at the end
 
-> Note: The installation may take a few seconds depending on your internet connection.
-> Please wait until you see `TAPING installed successfully.`
+> The installation may take a few seconds depending on the internet connection.
+> Wait until you see `TAPING installed successfully.`
 > Do not close PowerShell or press `CTRL+C` during installation.
 
 After installation, close and reopen CMD or PowerShell, then test:
@@ -49,12 +61,101 @@ After installation, close and reopen CMD or PowerShell, then test:
 taping help
 ```
 
-Example usage:
+## Quick Usage
+
+Ping a single IP:
+
+```cmd
+taping 192.168.1.1
+```
+
+Ping an IP range:
+
+```cmd
+taping range 192.168.1.1-100
+```
+
+Check a TCP port:
+
+```cmd
+taping 192.168.1.1 -p 443
+```
+
+Check a TCP port on an IP range:
+
+```cmd
+taping range 192.168.1.1-100 -p 3389
+```
+
+Show only successful results:
+
+```cmd
+taping range 192.168.1.1-100 --up
+```
+
+Run continuously until `CTRL+C`:
+
+```cmd
+taping 192.168.1.1 -p 443 --loop
+```
+
+Show version:
+
+```cmd
+taping --version
+```
+
+Show project information:
+
+```cmd
+taping about
+```
+
+## Examples
 
 ```cmd
 taping 8.8.8.8
-taping range 192.168.1.1-100
 taping 1.1.1.1 -p 443
+taping range 192.168.1.1-100
+taping range 192.168.1.1-100 --up
+taping range 192.168.1.1-100 --rdp
+taping 10.138.110.117 --zebra
+taping range 10.138.110.100-120 -p 9100
+```
+
+## Service Shortcuts
+
+| Option     | TCP Port | Usage                          |
+| ---------- | -------: | ------------------------------ |
+| `--http`   |       80 | `taping 192.168.1.10 --http`   |
+| `--https`  |      443 | `taping 192.168.1.10 --https`  |
+| `--ssh`    |       22 | `taping 192.168.1.10 --ssh`    |
+| `--rdp`    |     3389 | `taping 192.168.1.10 --rdp`    |
+| `--smb`    |      445 | `taping 192.168.1.10 --smb`    |
+| `--zebra`  |     9100 | `taping 192.168.1.10 --zebra`  |
+| `--winrm`  |     5985 | `taping 192.168.1.10 --winrm`  |
+| `--winrms` |     5986 | `taping 192.168.1.10 --winrms` |
+
+Only one service shortcut can be used at a time.
+
+Do not use `-p` together with a service shortcut.
+
+Correct:
+
+```cmd
+taping 192.168.1.10 --rdp
+```
+
+Correct:
+
+```cmd
+taping 192.168.1.10 -p 3389
+```
+
+Incorrect:
+
+```cmd
+taping 192.168.1.10 -p 3389 --rdp
 ```
 
 ## Manual Standalone Installation
@@ -73,136 +174,56 @@ The executable should be here:
 C:\taping\taping.exe
 ```
 
-Add `C:\taping` to your user PATH, then open a new CMD or PowerShell window and run:
+Add `C:\taping` to the user PATH.
+
+Then open a new CMD or PowerShell window and run:
 
 ```cmd
 taping help
 ```
 
-## Usage
+## Optional Python/pip Installation
 
-Ping a single IP:
+Use this method if you want to install TAPING with Python and pip instead of the standalone EXE.
 
-```cmd
-taping 192.168.1.1
+Python and pip are required. Git is not required.
+
+Install or upgrade directly from GitHub:
+
+```powershell
+python -m pip install --no-cache-dir --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
 ```
 
-Ping an IP range:
+If your system uses the Python launcher, this also works:
 
-```cmd
-taping range 192.168.1.10-20
+```powershell
+py -m pip install --no-cache-dir --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
 ```
 
-Check a TCP port:
+Test:
 
-```cmd
-taping 192.168.1.1 -p 80
+```powershell
+python -m taping.cli help
 ```
 
-Check a TCP port on an IP range:
+If the `taping` command is not recognized after pip installation, add the Python user Scripts folder to PATH:
 
-```cmd
-taping range 192.168.1.10-20 -p 443
+```powershell
+$ScriptsPath = python -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='nt_user'))"
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+if ($UserPath -notlike "*$ScriptsPath*") {
+    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$ScriptsPath", "User")
+}
+
+$env:Path += ";$ScriptsPath"
 ```
 
-Show only successful results:
+Then test again:
 
-```cmd
-taping range 192.168.1.10-20 --up
+```powershell
+taping help
 ```
-
-Run continuously until CTRL+C:
-
-```cmd
-taping 192.168.1.1 -p 443 --loop
-```
-
-Show project information:
-
-```cmd
-taping about
-```
-
-Show version:
-
-```cmd
-taping --version
-```
-
-## Examples
-
-```cmd
-taping 8.8.8.8
-taping 1.1.1.1 -p 443
-taping 212.154.103.165
-taping range 212.154.103.160-166
-taping 10.138.110.117 -p 9100
-taping range 10.138.110.100-120 -p 9100
-taping range 192.168.1.1-100 --rdp
-```
-
-## Service Shortcuts
-
-RDP:
-
-```cmd
-taping 192.168.1.10 --rdp
-```
-
-HTTP:
-
-```cmd
-taping 192.168.1.10 --http
-```
-
-HTTPS:
-
-```cmd
-taping 192.168.1.10 --https
-```
-
-SMB:
-
-```cmd
-taping 192.168.1.10 --smb
-```
-
-SSH:
-
-```cmd
-taping 192.168.1.10 --ssh
-```
-
-WinRM:
-
-```cmd
-taping 192.168.1.10 --winrm
-```
-
-WinRM over HTTPS:
-
-```cmd
-taping 192.168.1.10 --winrms
-```
-
-Zebra printer RAW port:
-
-```cmd
-taping 192.168.1.10 --zebra
-```
-
-Shortcut mapping:
-
-| Option     | TCP Port |
-| ---------- | -------: |
-| `--http`   |       80 |
-| `--https`  |      443 |
-| `--ssh`    |       22 |
-| `--rdp`    |     3389 |
-| `--smb`    |      445 |
-| `--zebra`  |     9100 |
-| `--winrm`  |     5985 |
-| `--winrms` |     5986 |
 
 ## Developer Installation
 
@@ -280,6 +301,7 @@ Test the generated executable:
 .\release\taping\taping.exe help
 .\release\taping\taping.exe 8.8.8.8
 .\release\taping\taping.exe 1.1.1.1 -p 443
+.\release\taping\taping.exe range 192.168.1.1-10 --up
 ```
 
 Upload these files to GitHub Releases:
@@ -289,70 +311,11 @@ release\taping-windows-x64.zip
 scripts\install.ps1
 ```
 
-## Optional Python Package Installation
-
-Use this method if you want to install TAPING with Python and pip, but you do not want to clone the repository manually.
-
-Python and pip are required. Git is not required.
-
-Install or upgrade directly from GitHub:
-
-```powershell
-python -m pip install --no-cache-dir --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
-```
-
-If your system uses the Python launcher, this also works:
-
-```powershell
-py -m pip install --no-cache-dir --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
-```
-
-Then test:
-
-```powershell
-taping help
-```
-
-If `taping` is not recognized after pip installation, run it directly through Python:
-
-```powershell
-python -m taping.cli help
-```
-
-
-Use this method if you want to install TAPING with Python and pip, but you do not want to clone the repository manually.
-
-Python and pip are required. Git is not required.
-
-Install directly from GitHub:
-
-```powershell
-python -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
-```
-
-If your system uses the Python launcher, this also works:
-
-```powershell
-py -m pip install --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
-```
-
-Then test:
-
-```powershell
-taping help
-```
-
-If `taping` is not recognized after pip installation, run it directly through Python:
-
-```powershell
-python -m taping.cli help
-```
-
 ## Troubleshooting
 
-### `taping` is not recognized
+### `taping` is not recognized after standalone installation
 
-If the standalone installer completed successfully but Windows says `taping` is not recognized, close and reopen CMD or PowerShell.
+Close and reopen CMD or PowerShell.
 
 If it still does not work, check that this folder exists:
 
@@ -366,7 +329,7 @@ Then check that this file exists:
 C:\taping\taping.exe
 ```
 
-Finally, confirm `C:\taping` is in your user PATH.
+Finally, confirm that `C:\taping` is in the user PATH.
 
 You can add it manually with PowerShell:
 
@@ -389,7 +352,7 @@ taping help
 
 ### Cannot create `C:\taping`
 
-If the installer cannot create `C:\taping`, run PowerShell as Administrator and try again.
+Run PowerShell as Administrator and try the installer again.
 
 ### PowerShell blocks virtual environment activation
 
@@ -413,7 +376,7 @@ Then try again:
 .\.venv\Scripts\Activate.ps1
 ```
 
-## Important Note
+## Important Notes
 
 Normal ping uses ICMP and does not use ports.
 
@@ -437,15 +400,19 @@ That command checks TCP/161, not UDP/161.
 
 ## Uninstall
 
-If installed with the standalone installer, remove the folder:
+### Standalone EXE installation
+
+Remove the installation folder:
 
 ```powershell
 Remove-Item C:\taping -Recurse -Force
 ```
 
-Then remove `C:\taping` from your user PATH.
+Then remove `C:\taping` from the user PATH.
 
-If installed with pip:
+### Python/pip installation
+
+Uninstall with pip:
 
 ```powershell
 python -m pip uninstall taping
@@ -456,6 +423,8 @@ or:
 ```powershell
 py -m pip uninstall taping
 ```
+
+If a stale `taping.exe` launcher remains, remove it from the Python Scripts folder.
 
 ## Original Project Notice
 
