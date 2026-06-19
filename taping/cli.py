@@ -225,6 +225,43 @@ def parse_time_ms(output):
     return None
 
 
+
+def is_icmp_success(ip, output):
+    for line in output.splitlines():
+        lower_line = line.lower()
+
+        if "ttl expired" in lower_line:
+            continue
+
+        if "expired in transit" in lower_line:
+            continue
+
+        if "destination host unreachable" in lower_line:
+            continue
+
+        if "destination net unreachable" in lower_line:
+            continue
+
+        if "request timed out" in lower_line:
+            continue
+
+        if "timed out" in lower_line:
+            continue
+
+        if ip not in line:
+            continue
+
+        has_ttl = "ttl=" in lower_line
+        has_payload = (
+            "bytes=" in lower_line
+            or "bayt=" in lower_line
+            or "octets=" in lower_line
+        )
+
+        if has_ttl and has_payload:
+            return True
+
+    return False
 def format_ms(value):
     if value is None:
         return "0.00ms"
@@ -306,7 +343,7 @@ def icmp_ping(ip, timeout_ms, show_success_only=False):
         if ping_time is None:
             ping_time = elapsed_ms
 
-        if result.returncode == 0:
+        if is_icmp_success(ip, output):
             ip_text = color(f"{ip:<18}", Colors.GREEN)
             status_text = color("UP", Colors.GREEN)
             time_text = color(format_ms(ping_time), Colors.CYAN)
@@ -548,6 +585,9 @@ def main():
         print(color("Break received. Stopping...", Colors.YELLOW))
 
     finally:
+        if args.up and stats["connected"] == 0:
+            print("No successful results found.")
+
         print_connection_statistics(stats)
 
     if stats["connected"] > 0:
@@ -558,4 +598,7 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+
 
