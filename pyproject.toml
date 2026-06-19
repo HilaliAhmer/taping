@@ -10,22 +10,21 @@ requires-python = ">=3.9"
 readme = "README.md"
 license = "MIT"
 authors = [
-  { name = "Selahattin Acikgoz" }
+{ name = "Selahattin Acikgoz" }
 ]
 keywords = ["ping", "tcp", "port", "network", "cli", "windows"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
-  "Environment :: Console",
-  "Intended Audience :: System Administrators",
-  "License :: OSI Approved :: MIT License",
-  "Operating System :: Microsoft :: Windows",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Topic :: System :: Networking",
-  "Topic :: Utilities",
+"Development Status :: 3 - Alpha",
+"Environment :: Console",
+"Intended Audience :: System Administrators",
+"Operating System :: Microsoft :: Windows",
+"Programming Language :: Python :: 3",
+"Programming Language :: Python :: 3.9",
+"Programming Language :: Python :: 3.10",
+"Programming Language :: Python :: 3.11",
+"Programming Language :: Python :: 3.12",
+"Topic :: System :: Networking",
+"Topic :: Utilities",
 ]
 
 [project.urls]
@@ -35,3 +34,8 @@ Issues = "https://github.com/HilaliAhmer/taping/issues"
 
 [project.scripts]
 taping = "taping.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["taping*"]
+exclude = ["build*", "dist*", "release*", "scripts*"]
