@@ -1,4 +1,4 @@
-"""TAPING command-line interface."""
+﻿"""TAPING command-line interface."""
 
 import argparse
 import os
@@ -207,7 +207,7 @@ def parse_ttl(output):
 def parse_time_ms(output):
     patterns = [
         r"time[=<]\s*(\d+(?:\.\d+)?)\s*ms",
-        r"süre[=<]\s*(\d+(?:\.\d+)?)\s*ms",
+        r"sÃ¼re[=<]\s*(\d+(?:\.\d+)?)\s*ms",
         r"temps[=<]\s*(\d+(?:\.\d+)?)\s*ms",
     ]
 
@@ -219,7 +219,7 @@ def parse_time_ms(output):
 
     lower_output = output.lower()
 
-    if "time<1ms" in lower_output or "süre<1ms" in lower_output:
+    if "time<1ms" in lower_output or "sÃ¼re<1ms" in lower_output:
         return 0.0
 
     return None
@@ -558,3 +558,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
