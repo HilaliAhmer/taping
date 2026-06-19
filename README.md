@@ -22,7 +22,7 @@ TAPING can be installed in two different ways:
 * **Normal users:** use the standalone Windows EXE installation. Python, pip and Git are not required.
 * **Developers:** use the Python developer installation if you want to modify or test the source code.
 
-## Recommended Installation for Normal Users
+## Standalone EXE Installation
 
 This method installs the standalone Windows EXE. Python, pip and Git are not required.
 
