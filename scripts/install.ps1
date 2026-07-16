@@ -52,25 +52,45 @@ try {
         throw "taping.exe was not found after installation."
     }
 
-    Write-Host "Adding $InstallDir to User PATH..."
+    Write-Host "Adding $InstallDir to the beginning of User PATH..."
 
+    $NormalizedInstallDir = $InstallDir.TrimEnd("\")
     $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 
     if ([string]::IsNullOrWhiteSpace($UserPath)) {
-        $PathItems = @()
+        $UserPathItems = @()
     }
     else {
-        $PathItems = $UserPath -split ";" | Where-Object { $_ -ne "" }
+        $UserPathItems = @(
+            $UserPath -split ";" |
+                Where-Object {
+                    $_ -and
+                    $_.Trim().TrimEnd("\") -ne $NormalizedInstallDir
+                }
+        )
     }
 
-    if ($PathItems -notcontains $InstallDir) {
-        $NewPath = (($PathItems + $InstallDir) -join ";")
-        [Environment]::SetEnvironmentVariable("Path", $NewPath, "User")
-    }
+    $NewUserPath = @(
+        $InstallDir
+    ) + $UserPathItems
 
-    if (($env:Path -split ";") -notcontains $InstallDir) {
-        $env:Path += ";$InstallDir"
-    }
+    [Environment]::SetEnvironmentVariable(
+        "Path",
+        ($NewUserPath -join ";"),
+        "User"
+    )
+
+    $CurrentPathItems = @(
+        $env:Path -split ";" |
+            Where-Object {
+                $_ -and
+                $_.Trim().TrimEnd("\") -ne $NormalizedInstallDir
+            }
+    )
+
+    $env:Path = (
+        @($InstallDir) + $CurrentPathItems
+    ) -join ";"
 
     Write-Host ""
     Write-Host "TAPING installed successfully."
