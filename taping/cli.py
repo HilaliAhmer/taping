@@ -12,7 +12,7 @@ import time
 try:
     from . import __version__
 except ImportError:
-    __version__ = "0.3.0"
+    __version__ = "0.3.1"
 
 VERSION = __version__
 AUTHOR = "Selahattin Acikgoz / HilaliAhmer"
@@ -113,10 +113,16 @@ Options:
         Set TCP port to check.
         Example: taping google.com -p 443
 
-  -t, --timeout MS
+  -t, --loop
+        Run continuously until CTRL+C.
+        Similar to the Windows ping -t option.
+        Example: taping google.com -t
+
+  -w, --timeout MS
         Set timeout in milliseconds.
-        Default for single-target ICMP: {DEFAULT_SINGLE_ICMP_TIMEOUT_MS}
-        Default for range and TCP checks: {DEFAULT_FAST_TIMEOUT_MS}
+        Default for single-target ICMP: 4000
+        Default for range and TCP checks: 700
+        Example: taping google.com -w 2000
 
   -c, --count COUNT
         Set number of checks.
@@ -127,10 +133,6 @@ Options:
         Delay between check rounds in milliseconds.
         Default: {DEFAULT_INTERVAL_MS}
         Example: taping 192.168.1.1 -c 10 -i 1000
-
-  --loop
-        Run continuously until CTRL+C.
-        Example: taping google.com --loop
 
   --up
         Show only successful results.
@@ -149,9 +151,12 @@ Service shortcuts:
   --winrms    TCP 5986
 
 Examples:
-  taping 8.8.8.8
+  taping google.com -t
+  taping google.com -t -w 2000
+  taping 8.8.8.8 -c 10
   taping google.com
   taping microsoft.com -c 10
+  taping google.com --loop
   taping 1.1.1.1 -p 443
   taping google.com --https
   taping 192.168.10.36 --rdp
@@ -746,7 +751,7 @@ def build_parser():
     )
 
     parser.add_argument(
-        "-t",
+        "-w",
         "--timeout",
         type=int,
     )
@@ -766,6 +771,7 @@ def build_parser():
     )
 
     parser.add_argument(
+        "-t",
         "--loop",
         action="store_true",
     )

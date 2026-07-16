@@ -1,47 +1,48 @@
 # TAPING
 
-TAPING is a small Windows command-line tool for quick ICMP ping and TCP port checks.
+TAPING is a lightweight Windows command-line tool for ICMP ping, IPv4 range scanning, DNS hostname checks, and TCP port connectivity tests.
 
-It helps you test a single IP address, an IP range, or a TCP port without memorizing long CMD or PowerShell loops.
+It provides a simpler and more readable alternative to long CMD or PowerShell network-testing commands.
 
 ## Features
 
-* Single IP ping
-* IP range ping
-* TCP port check
-* TCP port check for IP ranges
-* Service shortcuts for common ports
-* `--up` mode to show only successful results
-* `--loop` mode for continuous checks
-* Standalone Windows EXE installation
-* Optional Python/pip installation for technical users
-* Developer workflow for modifying the source code
-* DNS hostname support
-* Resolved IPv4 address display for hostnames
-* Timestamp on every ICMP and TCP result
-* Native-like ICMP timeout behavior
-* Configurable check interval with `-i` / `--interval`
+- Ping a single IPv4 address
+- Ping a DNS hostname such as `google.com`
+- Display the resolved IPv4 address for hostnames
+- Ping an IPv4 address range
+- Check TCP port connectivity
+- Check TCP ports across an IPv4 range
+- Use shortcuts for common services such as HTTP, HTTPS, SSH, RDP, SMB, Zebra, and WinRM
+- Add a timestamp to every ICMP and TCP result
+- Run continuously with `-t` or `--loop`
+- Set a custom timeout with `-w` or `--timeout`
+- Set the number of checks with `-c` or `--count`
+- Set the interval between checks with `-i` or `--interval`
+- Show only successful results with `--up`
+- Display connection statistics
+- Install as a standalone Windows executable
+- Install optionally through Python and pip
+- Build standalone Windows release packages with PyInstaller
 
-## Installation
+## Installation Methods
 
-TAPING can be installed in two ways.
-
-| Method         | Best for                      | Requires Python? | Requires Git? |
-| -------------- | ----------------------------- | ---------------: | ------------: |
-| Standalone EXE | Regular usage                 |               No |            No |
-| Python/pip     | Technical users or developers |              Yes |            No |
+| Method | Recommended for | Python required | Git required |
+| --- | --- | ---: | ---: |
+| Standalone EXE | Regular users | No | No |
+| Python/pip | Technical users | Yes | No |
+| Developer installation | Contributors and developers | Yes | Yes |
 
 ## Standalone EXE Installation
 
-This is the recommended method for most users.
+This is the recommended installation method.
 
-It installs TAPING under:
+TAPING is installed under:
 
 ```text
 C:\taping
 ```
 
-Python, pip and Git are not required.
+Python, pip, and Git are not required.
 
 Open PowerShell and run:
 
@@ -51,16 +52,27 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Write-Host 'Starting TAP
 
 The installer will:
 
-* download the latest `taping-windows-x64.zip` release
-* install TAPING under `C:\taping`
-* add `C:\taping` to the user PATH
-* run a quick TAPING test at the end
+- Download the latest `taping-windows-x64.zip` release
+- Extract TAPING under `C:\taping`
+- Add `C:\taping` to the beginning of the user PATH
+- Prioritize the standalone installation over older pip installations
+- Run a quick TAPING test
 
-> The installation may take a few seconds depending on the internet connection.
-> Wait until you see `TAPING installed successfully.`
-> Do not close PowerShell or press `CTRL+C` during installation.
+Wait until you see:
 
-After installation, close and reopen CMD or PowerShell, then test:
+```text
+TAPING installed successfully.
+```
+
+After installation, close and reopen CMD or PowerShell.
+
+Check the installed version:
+
+```cmd
+taping --version
+```
+
+Show the help screen:
 
 ```cmd
 taping help
@@ -68,13 +80,49 @@ taping help
 
 ## Quick Usage
 
-Ping a single IP:
+Ping an IPv4 address:
 
 ```cmd
-taping 192.168.1.1
+taping 8.8.8.8
 ```
 
-Ping an IP range:
+Ping a DNS hostname:
+
+```cmd
+taping google.com
+```
+
+Ping a target continuously until `CTRL+C`:
+
+```cmd
+taping google.com -t
+```
+
+The long option is also supported:
+
+```cmd
+taping google.com --loop
+```
+
+Ping a target five times:
+
+```cmd
+taping google.com -c 5
+```
+
+Use a custom timeout:
+
+```cmd
+taping google.com -w 2000
+```
+
+Ping continuously with a custom timeout:
+
+```cmd
+taping google.com -t -w 2000
+```
+
+Ping an IPv4 range:
 
 ```cmd
 taping range 192.168.1.1-100
@@ -83,10 +131,10 @@ taping range 192.168.1.1-100
 Check a TCP port:
 
 ```cmd
-taping 192.168.1.1 -p 443
+taping google.com -p 443
 ```
 
-Check a TCP port on an IP range:
+Check a TCP port across an IPv4 range:
 
 ```cmd
 taping range 192.168.1.1-100 -p 3389
@@ -98,57 +146,166 @@ Show only successful results:
 taping range 192.168.1.1-100 --up
 ```
 
-Run continuously until `CTRL+C`:
+## Command-Line Options
 
-```cmd
-taping 192.168.1.1 -p 443 --loop
+| Option | Description |
+| --- | --- |
+| `-p PORT`, `--port PORT` | Check a TCP port instead of ICMP |
+| `-t`, `--loop` | Run continuously until `CTRL+C`, similar to Windows `ping -t` |
+| `-w MS`, `--timeout MS` | Set the timeout in milliseconds |
+| `-c COUNT`, `--count COUNT` | Set the number of checks |
+| `-i MS`, `--interval MS` | Set the delay between check rounds in milliseconds |
+| `--up` | Show only successful results |
+| `--version` | Show the installed TAPING version |
+| `-?`, `-h`, `-help`, `--help` | Display the help screen |
+
+### Default Timing Values
+
+| Check type | Default timeout |
+| --- | ---: |
+| Single-target ICMP | 4000 ms |
+| IPv4 range ICMP | 700 ms |
+| TCP port check | 700 ms |
+
+The default interval between check rounds is:
+
+```text
+1000 ms
 ```
 
-Show version:
+### Timing Examples
+
+Run ten checks with the default one-second interval:
 
 ```cmd
-taping --version
+taping 8.8.8.8 -c 10
 ```
 
-Show project information:
+Run ten checks with a 500 ms interval:
 
 ```cmd
-taping about
+taping 8.8.8.8 -c 10 -i 500
+```
+
+Use a 2000 ms timeout:
+
+```cmd
+taping google.com -c 5 -w 2000
+```
+
+Run continuously with a 2000 ms timeout:
+
+```cmd
+taping google.com -t -w 2000
 ```
 
 ## Examples
 
 ```cmd
 taping 8.8.8.8
+taping google.com
+taping google.com -c 5
+taping google.com -t
+taping google.com --loop
+taping google.com -t -w 2000
+taping google.com -c 5 -w 3000
+taping google.com --https
+taping microsoft.com --https
 taping 1.1.1.1 -p 443
+taping 8.8.8.8 -c 10 -i 1000
+taping 192.168.10.36 --rdp
+taping 10.138.110.117 --zebra
 taping range 192.168.1.1-100
 taping range 192.168.1.1-100 --up
 taping range 192.168.1.1-100 --rdp
-taping 10.138.110.117 --zebra
 taping range 10.138.110.100-120 -p 9100
+taping range 192.168.1.1-100 -p 3389 -c 3
+taping range 192.168.1.1-100 -p 3389 --loop
+```
+
+## Output Example
+
+```text
+Pinging google.com [142.251.110.100] using ICMP:
+
+2026-07-16 10:02:20.903  google.com [142.251.110.100]               UP         44.00ms TTL=109
+2026-07-16 10:02:21.969  google.com [142.251.110.100]               UP         44.00ms TTL=109
+2026-07-16 10:02:23.031  google.com [142.251.110.100]               UP         44.00ms TTL=109
+
+Connection statistics:
+        Attempted = 3, Connected = 3, Failed = 0 (0.00%)
+Approximate connection times:
+        Minimum = 44.00ms, Maximum = 44.00ms, Average = 44.00ms
+```
+
+## DNS Hostname Support
+
+TAPING accepts DNS hostnames in addition to IPv4 addresses.
+
+Example:
+
+```cmd
 taping google.com
-taping google.com -c 5
+```
+
+TAPING resolves the hostname before starting the check:
+
+```text
+Pinging google.com [142.251.110.100] using ICMP:
+```
+
+Internal DNS names are also supported when they can be resolved by the client:
+
+```cmd
+taping server01.contoso.local
+```
+
+If a hostname cannot be resolved, TAPING reports a DNS failure instead of treating it as an unreachable IPv4 address.
+
+## ICMP and TCP Are Different
+
+A website can be reachable over HTTPS even when it does not respond to ICMP ping.
+
+For example:
+
+```cmd
+taping microsoft.com
+```
+
+may display:
+
+```text
+DOWN No reply
+```
+
+This does not necessarily mean that the website is unavailable.
+
+Test HTTPS separately:
+
+```cmd
 taping microsoft.com --https
-taping google.com --loop
-taping 8.8.8.8 -c 10 -i 1000
+```
+
+A successful result may look like:
+
+```text
+OPEN time=45.00ms protocol=TCP port=443
 ```
 
 ## Service Shortcuts
 
-| Option     | TCP Port | Usage                          |
-| ---------- | -------: | ------------------------------ |
-| `--http`   |       80 | `taping 192.168.1.10 --http`   |
-| `--https`  |      443 | `taping 192.168.1.10 --https`  |
-| `--ssh`    |       22 | `taping 192.168.1.10 --ssh`    |
-| `--rdp`    |     3389 | `taping 192.168.1.10 --rdp`    |
-| `--smb`    |      445 | `taping 192.168.1.10 --smb`    |
-| `--zebra`  |     9100 | `taping 192.168.1.10 --zebra`  |
-| `--winrm`  |     5985 | `taping 192.168.1.10 --winrm`  |
-| `--winrms` |     5986 | `taping 192.168.1.10 --winrms` |
+| Option | TCP port | Example |
+| --- | ---: | --- |
+| `--http` | 80 | `taping 192.168.1.10 --http` |
+| `--https` | 443 | `taping google.com --https` |
+| `--ssh` | 22 | `taping 192.168.1.10 --ssh` |
+| `--rdp` | 3389 | `taping 192.168.1.10 --rdp` |
+| `--smb` | 445 | `taping 192.168.1.10 --smb` |
+| `--zebra` | 9100 | `taping 192.168.1.10 --zebra` |
+| `--winrm` | 5985 | `taping 192.168.1.10 --winrm` |
+| `--winrms` | 5986 | `taping 192.168.1.10 --winrms` |
 
 Only one service shortcut can be used at a time.
-
-Do not use `-p` together with a service shortcut.
 
 Correct:
 
@@ -168,83 +325,165 @@ Incorrect:
 taping 192.168.1.10 -p 3389 --rdp
 ```
 
+Do not combine `-p` with a service shortcut.
+
+## IPv4 Range Format
+
+The supported range format changes only the last octet.
+
+Correct:
+
+```cmd
+taping range 192.168.1.10-20
+```
+
+This checks:
+
+```text
+192.168.1.10
+192.168.1.11
+192.168.1.12
+...
+192.168.1.20
+```
+
+Invalid examples:
+
+```text
+192.168.1.20-10
+192.168.1-10
+192.168.1.1-192.168.1.10
+```
+
 ## Manual Standalone Installation
 
-Download `taping-windows-x64.zip` from the latest GitHub Release.
+Download this file from the latest GitHub Release:
 
-Extract it so the final folder is:
+```text
+taping-windows-x64.zip
+```
+
+Do not download GitHub's automatically generated `Source code (zip)` package for client installation.
+
+Extract the release ZIP.
+
+The package should contain a `taping` folder with files similar to:
+
+```text
+taping\
+├── taping.exe
+├── README.md
+├── README.txt
+├── LICENSE
+└── NOTICE
+```
+
+Copy the contents into:
 
 ```text
 C:\taping
 ```
 
-The executable should be here:
+The executable should be located at:
 
 ```text
 C:\taping\taping.exe
 ```
 
-Add `C:\taping` to the user PATH.
+Add `C:\taping` to the beginning of the user PATH.
 
-Then open a new CMD or PowerShell window and run:
+Open a new CMD or PowerShell window and run:
 
 ```cmd
-taping help
+taping --version
+```
+
+## Updating TAPING
+
+Run the standalone installer again:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Write-Host 'Starting TAPING installer... Please wait.' -ForegroundColor Green; iex ((New-Object Net.WebClient).DownloadString('https://github.com/HilaliAhmer/taping/releases/latest/download/install.ps1'))"
+```
+
+The installer downloads and installs the latest GitHub Release.
+
+After the update, close and reopen CMD or PowerShell.
+
+Check the version:
+
+```cmd
+taping --version
 ```
 
 ## Optional Python/pip Installation
 
-Use this method if you want to install TAPING with Python and pip instead of the standalone EXE.
+Use this method only when you specifically want a Python-based installation.
 
-Python and pip are required. Git is not required.
+Python and pip are required.
 
-Install or upgrade directly from GitHub:
+Install or upgrade from GitHub:
 
 ```powershell
 python -m pip install --no-cache-dir --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
 ```
 
-If your system uses the Python launcher, this also works:
+The Python launcher can also be used:
 
 ```powershell
 py -m pip install --no-cache-dir --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
 ```
 
-Test:
+Test the module:
 
 ```powershell
+python -m taping.cli --version
 python -m taping.cli help
 ```
 
-If the `taping` command is not recognized after pip installation, add the Python user Scripts folder to PATH:
+### Standalone and pip PATH Conflict
 
-```powershell
-$ScriptsPath = python -c "import sysconfig; print(sysconfig.get_path('scripts', scheme='nt_user'))"
-$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+An older pip installation may create a launcher under a path similar to:
 
-if ($UserPath -notlike "*$ScriptsPath*") {
-    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$ScriptsPath", "User")
-}
-
-$env:Path += ";$ScriptsPath"
+```text
+C:\Users\USERNAME\AppData\Roaming\Python\Python312\Scripts\taping.exe
 ```
 
-Then test again:
+Check all detected TAPING commands:
 
 ```powershell
-taping help
+where.exe taping
+```
+
+Or:
+
+```powershell
+Get-Command taping -All |
+    Format-Table CommandType, Name, Source, Definition -AutoSize
+```
+
+For the standalone installation, the first result should be:
+
+```text
+C:\taping\taping.exe
+```
+
+An old pip installation can be removed with:
+
+```powershell
+python -m pip uninstall taping
 ```
 
 ## Developer Installation
 
-Use this method if you want to develop, modify or test the Python source code.
+Use this method to modify or test the Python source code.
 
-Requirements:
+### Requirements
 
-* Windows
-* Python 3.9 or newer
-* pip
-* Git
+- Windows
+- Python 3.9 or newer
+- pip
+- Git
 
 Clone the repository:
 
@@ -257,6 +496,11 @@ Create a virtual environment:
 
 ```powershell
 py -m venv .venv
+```
+
+Activate it:
+
+```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
@@ -266,113 +510,265 @@ Install TAPING in editable mode:
 python -m pip install -e .
 ```
 
-Test:
+Run developer tests:
 
 ```powershell
-taping help
-taping about
-taping 8.8.8.8
-taping 1.1.1.1 -p 443
+python -m py_compile .\taping\cli.py
+python -m taping.cli --version
+python -m taping.cli help
+python -m taping.cli about
+python -m taping.cli 8.8.8.8
+python -m taping.cli google.com -c 3
+python -m taping.cli google.com -c 3 -w 2000
+python -m taping.cli google.com --https -c 2
+python -m taping.cli range 192.168.1.1-10 --up
 ```
 
-When you edit the source code, the `taping` command will use your local development version.
+Continuous mode test:
 
-## Build Standalone Windows Release
+```powershell
+python -m taping.cli google.com -t
+```
 
-Use this method only when preparing a new Windows release package.
+Stop it with `CTRL+C`.
 
-Activate your virtual environment first:
+When the source code is edited, the editable installation uses the local development version.
+
+## Building a Standalone Windows Release
+
+Activate the virtual environment:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-Install PyInstaller:
+Install or upgrade PyInstaller:
 
 ```powershell
 python -m pip install --upgrade pyinstaller
 ```
 
-Build the release package:
+Build the release:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-The release package will be created under:
+The release files are created under:
 
 ```text
 release\
 ```
 
-Test the generated executable:
-
-```powershell
-.\release\taping\taping.exe help
-.\release\taping\taping.exe 8.8.8.8
-.\release\taping\taping.exe 1.1.1.1 -p 443
-.\release\taping\taping.exe range 192.168.1.1-10 --up
-```
-
-Upload these files to GitHub Releases:
+Expected release assets:
 
 ```text
 release\taping-windows-x64.zip
-scripts\install.ps1
+release\install.ps1
 ```
+
+## Testing the Generated EXE
+
+Check the version:
+
+```powershell
+.\release\taping\taping.exe --version
+```
+
+Show help:
+
+```powershell
+.\release\taping\taping.exe help
+```
+
+Test ICMP:
+
+```powershell
+.\release\taping\taping.exe 8.8.8.8 -c 5
+```
+
+Test a DNS hostname:
+
+```powershell
+.\release\taping\taping.exe google.com -c 3
+```
+
+Test custom timeout:
+
+```powershell
+.\release\taping\taping.exe google.com -c 3 -w 2000
+```
+
+Test continuous mode:
+
+```powershell
+.\release\taping\taping.exe google.com -t
+```
+
+Stop it with `CTRL+C`.
+
+Test TCP:
+
+```powershell
+.\release\taping\taping.exe google.com --https -c 2
+```
+
+Test an IPv4 range:
+
+```powershell
+.\release\taping\taping.exe range 192.168.1.1-10 --up
+```
+
+## Publishing a GitHub Release
+
+Before publishing, confirm that:
+
+- The Python version is correct
+- The standalone EXE version is correct
+- DNS hostname checks work
+- ICMP checks work
+- TCP checks work
+- Range checks work
+- `-t` continuous mode works
+- `-w` timeout works
+- The installer prioritizes `C:\taping` in PATH
+- The Git working tree is clean
+
+Create and push a version tag:
+
+```powershell
+git tag -a v0.3.1 -m "TAPING v0.3.1"
+git push origin v0.3.1
+```
+
+Create a GitHub Release using the same tag.
+
+Upload:
+
+```text
+release\taping-windows-x64.zip
+release\install.ps1
+```
+
+Mark the new release as:
+
+```text
+Latest
+```
+
+Do not upload GitHub's automatically generated source ZIP as the Windows installer package.
 
 ## Troubleshooting
 
-### `taping` is not recognized after standalone installation
+### `taping` is not recognized
 
 Close and reopen CMD or PowerShell.
 
-If it still does not work, check that this folder exists:
+Confirm the installation folder exists:
 
 ```text
 C:\taping
 ```
 
-Then check that this file exists:
+Confirm the executable exists:
 
 ```text
 C:\taping\taping.exe
 ```
 
-Finally, confirm that `C:\taping` is in the user PATH.
+Test the executable directly:
 
-You can add it manually with PowerShell:
+```powershell
+C:\taping\taping.exe --version
+```
+
+### An older TAPING version is executed
+
+Check the command resolution order:
+
+```powershell
+where.exe taping
+```
+
+The first result should be:
+
+```text
+C:\taping\taping.exe
+```
+
+Check all detected commands:
+
+```powershell
+Get-Command taping -All |
+    Format-Table CommandType, Name, Source, Definition -AutoSize
+```
+
+Place `C:\taping` at the beginning of the user PATH:
 
 ```powershell
 $InstallDir = "C:\taping"
+$NormalizedInstallDir = $InstallDir.TrimEnd("\")
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 
-if ($UserPath -notlike "*$InstallDir*") {
-    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
-}
+$ExistingItems = @(
+    $UserPath -split ";" |
+        Where-Object {
+            $_ -and
+            $_.Trim().TrimEnd("\") -ne $NormalizedInstallDir
+        }
+)
 
-$env:Path += ";$InstallDir"
+$NewUserPath = (@($InstallDir) + $ExistingItems) -join ";"
+
+[Environment]::SetEnvironmentVariable(
+    "Path",
+    $NewUserPath,
+    "User"
+)
+
+$CurrentItems = @(
+    $env:Path -split ";" |
+        Where-Object {
+            $_ -and
+            $_.Trim().TrimEnd("\") -ne $NormalizedInstallDir
+        }
+)
+
+$env:Path = (@($InstallDir) + $CurrentItems) -join ";"
 ```
 
-Then test:
+Test again:
 
 ```powershell
-taping help
+where.exe taping
+taping --version
 ```
+
+### CrowdStrike or another security product blocks the installer
+
+Do not bypass endpoint security controls.
+
+Download the following asset manually from the latest GitHub Release:
+
+```text
+taping-windows-x64.zip
+```
+
+Extract it and copy the packaged files into:
+
+```text
+C:\taping
+```
+
+If `taping.exe` itself is blocked, contact the security team and request an appropriate review or allowlisting decision.
 
 ### Cannot create `C:\taping`
 
-Run PowerShell as Administrator and try the installer again.
+Open PowerShell as Administrator and run the installer again.
 
 ### PowerShell blocks virtual environment activation
 
 This applies only to developer installation.
-
-If this command fails:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
 
 Run:
 
@@ -380,17 +776,37 @@ Run:
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-Then try again:
+Then activate the environment:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
+### A hostname is DOWN but the website opens
+
+The target may block ICMP while allowing TCP connections.
+
+Test its HTTPS port:
+
+```cmd
+taping hostname.example --https
+```
+
+### DNS resolution fails
+
+Confirm that Windows can resolve the hostname:
+
+```powershell
+Resolve-DnsName google.com
+```
+
+For internal hostnames, verify that the client is using the correct corporate DNS servers.
+
 ## Important Notes
 
-Normal ping uses ICMP and does not use ports.
+ICMP ping does not use TCP or UDP ports.
 
-When you use `-p`, TAPING performs a TCP connection test, similar to paping.
+When `-p` or a service shortcut is used, TAPING performs a TCP connection test similar to paping.
 
 Example:
 
@@ -400,45 +816,61 @@ taping 192.168.1.1 -p 443
 
 This checks whether TCP port 443 is reachable.
 
-SNMP usually uses UDP 161, so this is not a correct SNMP test:
+SNMP normally uses UDP port 161.
+
+This command:
 
 ```cmd
 taping 192.168.1.1 -p 161
 ```
 
-That command checks TCP/161, not UDP/161.
+checks TCP port 161, not SNMP over UDP.
+
+IPv6 is not currently supported. TAPING resolves and checks IPv4 addresses.
+
+## Exit Codes
+
+| Exit code | Meaning |
+| ---: | --- |
+| `0` | At least one check succeeded |
+| `1` | Invalid argument, configuration, or input |
+| `2` | No checks succeeded |
 
 ## Uninstall
 
-### Standalone EXE installation
+### Standalone EXE Installation
 
-Remove the installation folder:
+Remove the TAPING folder:
 
 ```powershell
 Remove-Item C:\taping -Recurse -Force
 ```
 
-Then remove `C:\taping` from the user PATH.
+Remove `C:\taping` from the user PATH afterward.
 
-### Python/pip installation
+### Python/pip Installation
 
-Uninstall with pip:
+Uninstall with:
 
 ```powershell
 python -m pip uninstall taping
 ```
 
-or:
+Or:
 
 ```powershell
 py -m pip uninstall taping
 ```
 
-If a stale `taping.exe` launcher remains, remove it from the Python Scripts folder.
+If a stale `taping.exe` launcher remains, remove it from the corresponding Python Scripts folder.
 
 ## Original Project Notice
 
-TAPING is created and maintained by Selahattin Açıkgöz / HilaliAhmer.
+TAPING is created and maintained by:
+
+```text
+Selahattin Açıkgöz / HilaliAhmer
+```
 
 Original project:
 
@@ -446,10 +878,12 @@ Original project:
 https://github.com/HilaliAhmer/taping
 ```
 
-If you copy, modify, distribute, or use substantial parts of this project, keep the original copyright and license notice.
+If you copy, modify, distribute, or use substantial parts of this project, retain the original copyright and license notices.
 
 ## License
 
 This project is licensed under the MIT License.
 
+```text
 Copyright (c) 2026 Selahattin Açıkgöz
+```
