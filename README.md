@@ -164,8 +164,16 @@ taping range 192.168.1.1-100 --up
 | Check type | Default timeout |
 | --- | ---: |
 | Single-target ICMP | 4000 ms |
-| IPv4 range ICMP | 700 ms |
-| TCP port check | 700 ms |
+| IPv4 range ICMP | 4000 ms |
+| TCP port check | 4000 ms |
+
+The default timeout is `4000 ms` for all ICMP and TCP checks.
+
+A custom timeout can be selected with `-w` or `--timeout`:
+
+```cmd
+taping range 192.168.1.1-100 -w 1000
+```
 
 The default interval between check rounds is:
 

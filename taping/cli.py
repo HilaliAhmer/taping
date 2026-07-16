@@ -18,8 +18,7 @@ VERSION = __version__
 AUTHOR = "Selahattin Acikgoz / HilaliAhmer"
 REPOSITORY = "https://github.com/HilaliAhmer/taping"
 
-DEFAULT_SINGLE_ICMP_TIMEOUT_MS = 4000
-DEFAULT_FAST_TIMEOUT_MS = 700
+DEFAULT_TIMEOUT_MS = 4000
 DEFAULT_INTERVAL_MS = 1000
 
 SERVICE_PORTS = {
@@ -120,8 +119,7 @@ Options:
 
   -w, --timeout MS
         Set timeout in milliseconds.
-        Default for single-target ICMP: 4000
-        Default for range and TCP checks: 700
+        Default: {DEFAULT_TIMEOUT_MS} for all ICMP and TCP checks.
         Example: taping google.com -w 2000
 
   -c, --count COUNT
@@ -829,23 +827,25 @@ def build_parser():
     return parser
 
 
-def get_timeout_ms(
-    args,
-    is_range,
-    port,
-):
+def get_timeout_ms(args):
     if args.timeout is not None:
         return args.timeout
 
-    if not is_range and port is None:
-        return DEFAULT_SINGLE_ICMP_TIMEOUT_MS
-
-    return DEFAULT_FAST_TIMEOUT_MS
+    return DEFAULT_TIMEOUT_MS
 
 
-def sleep_between_rounds(interval_ms):
-    if interval_ms > 0:
-        time.sleep(interval_ms / 1000)
+def wait_for_next_round(round_started_at, interval_ms):
+    if interval_ms <= 0:
+        return
+
+    elapsed_ms = (
+        time.perf_counter() - round_started_at
+    ) * 1000
+
+    remaining_ms = interval_ms - elapsed_ms
+
+    if remaining_ms > 0:
+        time.sleep(remaining_ms / 1000)
 
 
 def main():
@@ -1010,11 +1010,7 @@ def main():
             resolved_targets[0][1]
         )
 
-    timeout_ms = get_timeout_ms(
-        args,
-        is_range,
-        port,
-    )
+    timeout_ms = get_timeout_ms(args)
 
     print_header(
         target_text,
@@ -1049,25 +1045,31 @@ def main():
     try:
         if args.loop:
             while True:
+                round_started_at = time.perf_counter()
+
                 run_check_round()
 
-                sleep_between_rounds(
-                    args.interval
+                wait_for_next_round(
+                    round_started_at,
+                    args.interval,
                 )
 
         else:
             for round_number in range(
-                args.count
-            ):
-                run_check_round()
-
-                if (
-                    round_number
-                    < args.count - 1
+                    args.count
                 ):
-                    sleep_between_rounds(
-                        args.interval
-                    )
+                    round_started_at = time.perf_counter()
+
+                    run_check_round()
+
+                    if (
+                        round_number
+                        < args.count - 1
+                    ):
+                        wait_for_next_round(
+                            round_started_at,
+                            args.interval,
+                        )
 
     except KeyboardInterrupt:
         print("")
