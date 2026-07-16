@@ -222,11 +222,11 @@ taping microsoft.com --https
 taping 1.1.1.1 -p 443
 taping 8.8.8.8 -c 10 -i 1000
 taping 192.168.10.36 --rdp
-taping 10.138.110.117 --zebra
+taping 192.168.10.3 --zebra
 taping range 192.168.1.1-100
 taping range 192.168.1.1-100 --up
 taping range 192.168.1.1-100 --rdp
-taping range 10.138.110.100-120 -p 9100
+taping range 10.10.110.100-120 -p 9100
 taping range 192.168.1.1-100 -p 3389 -c 3
 taping range 192.168.1.1-100 -p 3389 --loop
 ```
