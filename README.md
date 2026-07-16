@@ -16,6 +16,11 @@ It helps you test a single IP address, an IP range, or a TCP port without memori
 * Standalone Windows EXE installation
 * Optional Python/pip installation for technical users
 * Developer workflow for modifying the source code
+* DNS hostname support
+* Resolved IPv4 address display for hostnames
+* Timestamp on every ICMP and TCP result
+* Native-like ICMP timeout behavior
+* Configurable check interval with `-i` / `--interval`
 
 ## Installation
 
@@ -121,6 +126,11 @@ taping range 192.168.1.1-100 --up
 taping range 192.168.1.1-100 --rdp
 taping 10.138.110.117 --zebra
 taping range 10.138.110.100-120 -p 9100
+taping google.com
+taping google.com -c 5
+taping microsoft.com --https
+taping google.com --loop
+taping 8.8.8.8 -c 10 -i 1000
 ```
 
 ## Service Shortcuts
