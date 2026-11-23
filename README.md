@@ -2,257 +2,157 @@
 
 [![Latest Release](https://img.shields.io/github/v/release/HilaliAhmer/taping)](https://github.com/HilaliAhmer/taping/releases/latest)
 [![License](https://img.shields.io/github/license/HilaliAhmer/taping)](LICENSE)
-[![Windows](https://img.shields.io/badge/platform-Windows-blue)](https://github.com/HilaliAhmer/taping)
 
-**TAPING** is a lightweight Windows command-line tool for checking ICMP ping, TCP ports, DNS hostnames, and IPv4 ranges.
+**TAPING** is a small command-line network diagnostic tool for Windows and Linux. It checks IPv4 reachability, TCP ports, IPv4 ranges, and network routes — without a long list of special-purpose switches.
 
-It provides a simple and readable alternative to long CMD and PowerShell network-testing commands.
+> **Version note:** This README describes the **v0.3.2 source code**. Until v0.3.2 is built and published as a GitHub Release, the **latest release installer may still install v0.3.1**. Do not expect the new `trace` command in an older executable.
 
-## Features
+## Quick start
 
-* Ping IPv4 addresses and DNS hostnames
-* Scan an IPv4 address range
-* Test TCP port connectivity
-* Use shortcuts for common services
-* Run continuously
-* Display timestamps and connection statistics
-* Show only reachable hosts
-* Use without installing Python
+| Task | Command |
+| --- | --- |
+| Ping an IP | `taping 8.8.8.8` |
+| Ping a hostname | `taping google.com` |
+| Ping continuously | `taping 8.8.8.8 -t` |
+| Ping 5 times | `taping 8.8.8.8 -c 5` |
+| Custom timeout | `taping 8.8.8.8 -w 2000` |
+| Test TCP port 443 | `taping google.com -p 443` |
+| Scan an IPv4 range | `taping range 192.168.1.10-20` |
+| Check TCP 3389 across a range | `taping range 192.168.1.10-20 -p 3389` |
+| Trace ICMP route | `taping trace 8.8.8.8` |
+| Trace route using TCP/443 | `taping trace google.com -p 443` |
 
-## Installation
-
-### Recommended: PowerShell Installer
-
-Open PowerShell and run:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Write-Host 'Starting TAPING installer... Please wait.' -ForegroundColor Green; iex ((New-Object Net.WebClient).DownloadString('https://github.com/HilaliAhmer/taping/releases/latest/download/install.ps1'))"
-```
-
-The installer downloads TAPING, installs it under `C:\taping`, and adds it to your user PATH.
-
-After installation, close and reopen PowerShell or CMD.
-
-Confirm the installation:
-
-```powershell
-taping --version
-```
-
-Show the help screen:
-
-```powershell
-taping help
-```
-
-### Manual Installation
-
-Download `taping-windows-x64.zip` from the [latest release](https://github.com/HilaliAhmer/taping/releases/latest).
-
-Do not download GitHub's automatically generated **Source code** ZIP.
-
-Extract the package and run `taping.exe`, or copy its contents into:
-
-```text
-C:\taping
-```
-
-## Quick Start
-
-| What you want to do       | Command                              |
-| ------------------------- | ------------------------------------ |
-| Ping an IP address        | `taping 8.8.8.8`                     |
-| Ping a hostname           | `taping google.com`                  |
-| Run continuously          | `taping google.com -t`               |
-| Run five checks           | `taping google.com -c 5`             |
-| Scan an IPv4 range        | `taping range 192.168.1.1-100`       |
-| Show only reachable hosts | `taping range 192.168.1.1-100 --up`  |
-| Test TCP port 443         | `taping google.com -p 443`           |
-| Test RDP across a range   | `taping range 192.168.1.1-100 --rdp` |
-
-Stop continuous mode with `CTRL+C`.
-
-## Service Shortcuts
-
-Instead of remembering common TCP port numbers, use a service shortcut:
-
-| Shortcut   | Service        | TCP port |
-| ---------- | -------------- | -------: |
-| `--http`   | HTTP           |       80 |
-| `--https`  | HTTPS          |      443 |
-| `--ssh`    | SSH            |       22 |
-| `--rdp`    | Remote Desktop |     3389 |
-| `--smb`    | SMB            |      445 |
-| `--zebra`  | Zebra printing |     9100 |
-| `--winrm`  | WinRM          |     5985 |
-| `--winrms` | Secure WinRM   |     5986 |
-
-Example:
-
-```powershell
-taping server01 --rdp
-```
-
-The following commands perform the same TCP test:
-
-```powershell
-taping server01 --rdp
-taping server01 -p 3389
-```
-
-Do not combine `-p` with a service shortcut.
+Run `taping help` for the short built-in help screen, or `taping about` to see the version. Stop continuous mode with `Ctrl+C`.
 
 ## Options
 
-| Option                      | Description                     |
-| --------------------------- | ------------------------------- |
-| `-p PORT`, `--port PORT`    | Test a TCP port instead of ICMP |
-| `-t`, `--loop`              | Run continuously until `CTRL+C` |
-| `-c COUNT`, `--count COUNT` | Set the number of checks        |
-| `-w MS`, `--timeout MS`     | Set the timeout in milliseconds |
-| `-i MS`, `--interval MS`    | Set the delay between checks    |
-| `--up`                      | Show only successful results    |
-| `--version`                 | Show the installed version      |
-| `-h`, `--help`              | Show the help screen            |
+| Option | Purpose |
+| --- | --- |
+| `-p PORT`, `--port PORT` | TCP port check, or TCP traceroute when used with `trace` |
+| `-t`, `--loop` | Run ping/port checks continuously until `Ctrl+C` |
+| `-w MS`, `--timeout MS` | Per-attempt timeout in milliseconds (default **4000**) |
+| `-c COUNT`, `--count COUNT` | Number of ping/port check rounds (default **1**) |
+| `-?`, `-h`, `--help` | Show help |
 
-The default timeout is `4000 ms`, and the default interval is `1000 ms`.
+The interval between check **rounds** is fixed at approximately **1000 ms** (measured from the start of each round). `-t` and `-c` do **not** apply to `trace`.
 
-Example with custom values:
+**Removed in v0.3.2:** `--up`, `-i`/`--interval`, `--version`, and service shortcuts such as `--https`, `--rdp`, and `--ssh`. Use `-p` with a port number instead (for example `-p 3389`). Use `taping about` instead of `--version`.
 
-```powershell
-taping google.com -c 10 -w 2000 -i 500
-```
+## Smart IPv4 range scans
 
-## IPv4 Range Format
-
-TAPING changes only the final part of an IPv4 address.
-
-Correct:
+A range changes only the final octet:
 
 ```powershell
 taping range 192.168.1.10-20
 ```
 
-This checks addresses from `192.168.1.10` through `192.168.1.20`.
+The full-address form `192.168.1.10-192.168.1.20` is **not** supported.
 
-The following full-address format is not supported:
+Range ICMP checks are fast when a device answers immediately, but cautious about reporting `DOWN`:
 
-```text
-192.168.1.10-192.168.1.20
-```
+1. First echo: up to **800 ms**.
+2. If unanswered, retry after 250 ms with up to **1200 ms**.
+3. If still unanswered, retry after 350 ms with up to **2000 ms**.
+4. If still unanswered, retry after 500 ms with the full timeout (**4000 ms** by default).
 
-## ICMP and TCP Tests
+The first successful response marks the host `UP`; no more attempts are sent to it. An initially missed reply that later succeeds appears as `recovered on attempt 2/4`, for example. To avoid large delays, at most **8** range IPs are checked concurrently; output remains in IP order.
 
-A device or website may block ICMP ping while still accepting TCP connections.
+A custom `-w` limits **each** retry's timeout. When `-c` or `-t` is used with a range, every round repeats the range checks. Each IP counts **once per round** in the final connection statistics, regardless of retries.
 
-For example, a website may appear as `DOWN` with:
+A `DOWN` result means there was no ICMP reply to the attempted checks; it does **not** prove that the device is powered off. Firewalls may block ICMP.
+
+## ICMP, TCP and traceroute
+
+Without `-p`, TAPING checks **ICMP Echo**. The `-p` option checks **TCP**, not UDP or SNMP:
 
 ```powershell
 taping example.com
+taping example.com -p 443
 ```
 
-Test its HTTPS service separately:
+An ICMP-blocked website can still have an open TCP port.
+
+Route tracing:
 
 ```powershell
-taping example.com --https
+taping trace 10.6.106.50
+taping trace 10.6.106.50 -p 443
 ```
 
-The `-p` option always performs a **TCP** connection test. It does not test UDP services.
+- **ICMP trace** runs the system's `tracert` (Windows) or `traceroute -I` (Linux). On Linux, install `traceroute` separately if needed (`sudo apt install traceroute`).
+- **TCP trace** uses TTL-limited TCP connections and captures ICMP replies. It generally requires an **Administrator** terminal on Windows or **root/CAP_NET_RAW** on Linux. Some routers do not return their hop information, so `*`/`TIMEOUT` is not necessarily a broken route.
+- TAPING uses **IPv4 only**.
 
-IPv6 is not currently supported.
+On Windows, TAPING uses the native `IcmpSendEcho` API for ICMP ping, avoiding language-dependent parsing of `ping.exe` output. On Linux, it uses the system `ping` command.
 
-## Updating
+## Installation
 
-Run the PowerShell installer again:
+### Windows standalone (no Python needed)
+
+Download `taping-windows-x64.zip` and `install.ps1` from the [GitHub Releases page](https://github.com/HilaliAhmer/taping/releases/latest). When using the **v0.3.2 installer**, it also downloads `SHA256SUMS` and checks the archive's SHA-256 hash before extraction.
+
+To run the installer after inspecting its contents:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Write-Host 'Starting TAPING installer... Please wait.' -ForegroundColor Green; iex ((New-Object Net.WebClient).DownloadString('https://github.com/HilaliAhmer/taping/releases/latest/download/install.ps1'))"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Close and reopen PowerShell or CMD, then verify the version:
+The updated installer installs for the current user under `%LOCALAPPDATA%\Programs\taping` and adds that directory to your **User PATH**. Close and reopen the terminal, then run:
 
 ```powershell
-taping --version
+taping about
+taping help
 ```
 
-## Troubleshooting
+For **manual installation**, extract the ZIP file to a directory such as `%LOCALAPPDATA%\Programs\taping` and add that directory to PATH. If an old copy remains under `C:\taping`, use `where.exe taping` to check which one takes priority.
 
-### `taping` is not recognized
+**Existing v0.3.1 installs:** A new v0.3.2 release must be published before the latest-release installer can install the commands described here. The installer cannot update a release that has not been published.
 
-Close and reopen PowerShell or CMD.
+### Python development install
 
-Test the executable directly:
+Python **3.11+ is recommended** (the package still permits Python 3.9+, but older Python versions are no longer security-supported). Clone the repository, create a virtual environment and install the editable project:
 
 ```powershell
-C:\taping\taping.exe --version
+git clone https://github.com/HilaliAhmer/taping.git
+cd taping
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+python -m taping.cli about
 ```
 
-### An older version opens
+On Linux, create the environment with `python3 -m venv .venv`, activate with `source .venv/bin/activate` and run the same pip command. In source checkout, `python -m taping.cli ...` runs the modified `cli.py` directly.
 
-Check which executable Windows is using:
+## Updating and troubleshooting
 
-```powershell
-where.exe taping
-```
+- **Update standalone:** download and run the installer for the newly published release, or replace your standalone files manually.
+- **Command not found:** reopen the terminal, then run `where.exe taping` (Windows) or `command -v taping` (Linux).
+- **Old version runs:** check `taping about` and the executable locations on PATH. A standalone executable is independent of the Python source files you just edited.
+- **TCP trace reports permission denied:** run an elevated Windows terminal or use root/CAP_NET_RAW on Linux. Network policy may still block raw socket capture.
+- **ICMP says DOWN but TCP works:** try `taping example.com -p 443`; some destinations block ICMP.
+- **Security software blocks the installer:** do not disable endpoint protections. Download the official release manually and request your security team's review.
 
-For the standalone installation, the first result should be:
+## Exit codes
 
-```text
-C:\taping\taping.exe
-```
-
-### A website opens but TAPING reports DOWN
-
-The website may be blocking ICMP ping. Test its HTTPS port:
-
-```powershell
-taping example.com --https
-```
-
-### The installer is blocked by security software
-
-Do not bypass endpoint-security controls.
-
-Download `taping-windows-x64.zip` manually from the [latest release](https://github.com/HilaliAhmer/taping/releases/latest), or contact your security team for review.
-
-## Optional Python Installation
-
-Python 3.9 or newer is required.
-
-```powershell
-python -m pip install --no-cache-dir --user --upgrade --force-reinstall https://github.com/HilaliAhmer/taping/archive/refs/heads/main.zip
-```
-
-Run TAPING through Python:
-
-```powershell
-python -m taping.cli google.com
-```
+| Exit code | Meaning |
+| ---: | --- |
+| `0` | At least one check succeeded, or traced destination was confirmed |
+| `1` | Invalid command, DNS/configuration issue, or execution failure |
+| `2` | No checks succeeded, or trace could not confirm the destination |
 
 ## Uninstall
 
-Delete the standalone installation:
-
-```powershell
-Remove-Item C:\taping -Recurse -Force
-```
-
-Then remove `C:\taping` from your user PATH.
-
-For the Python installation:
+For the updated standalone installer, remove `%LOCALAPPDATA%\Programs\taping` and remove its entry from your User PATH. Older installations might be under `C:\taping`. For pip installs:
 
 ```powershell
 python -m pip uninstall taping
 ```
 
-## Project Documentation
+## Project
 
 - [Development Guide](DEVELOPMENT.md)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
+- [License](LICENSE)
 
-## License
-
-TAPING is licensed under the [MIT License](LICENSE).
-
-Copyright © 2026 Selahattin Açıkgöz.
+TAPING is developed by Selahattin Açıkgöz / HilaliAhmer. Copyright © 2026 Selahattin Açıkgöz. MIT License.

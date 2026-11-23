@@ -1,36 +1,43 @@
-﻿"""TAPING command-line interface."""
+"""TAPING command-line interface: ICMP, TCP port checks and traceroute.
+
+Based on the public HilaliAhmer/taping main branch (v0.3.1).
+Copyright (c) 2026 Selahattin Açıkgöz. MIT License.
+"""
 
 import argparse
+import ctypes
+from ctypes import wintypes
+from functools import lru_cache
+import ipaddress
+from concurrent.futures import ThreadPoolExecutor
+import errno
 from datetime import datetime
 import os
 import re
+import select
 import socket
+import struct
 import subprocess
 import sys
 import time
 
-try:
-    from . import __version__
-except ImportError:
-    __version__ = "0.3.1"
+from taping import __version__
+
 
 VERSION = __version__
 AUTHOR = "Selahattin Acikgoz / HilaliAhmer"
 REPOSITORY = "https://github.com/HilaliAhmer/taping"
-
 DEFAULT_TIMEOUT_MS = 4000
 DEFAULT_INTERVAL_MS = 1000
+MAX_TRACE_HOPS = 30
+MAX_TCP_PORT = 65535
+MIN_TIMEOUT_MS = 100
 
-SERVICE_PORTS = {
-    "http": 80,
-    "https": 443,
-    "ssh": 22,
-    "rdp": 3389,
-    "smb": 445,
-    "zebra": 9100,
-    "winrm": 5985,
-    "winrms": 5986,
-}
+# Range scans: retry only hosts that did not answer. Fast hosts never wait.
+# First probes are short; the final probe gets the full -w timeout.
+RANGE_PROBE_TIMEOUTS_MS = (800, 1200, 2000, None)
+RANGE_RETRY_DELAYS_MS = (250, 350, 500)
+RANGE_MAX_WORKERS = 8
 
 
 class Colors:
@@ -42,20 +49,42 @@ class Colors:
     GRAY = "\033[90m"
 
 
+_WINDOWS_ANSI_ENABLED = False
+
+
+def enable_console_colors():
+    """Enable ANSI on Windows terminals without launching a shell."""
+    global _WINDOWS_ANSI_ENABLED
+    if os.name != "nt" or not sys.stdout.isatty():
+        return
+    try:
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.GetStdHandle.argtypes = [wintypes.DWORD]
+        kernel.GetStdHandle.restype = wintypes.HANDLE
+        kernel.GetConsoleMode.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        kernel.GetConsoleMode.restype = wintypes.BOOL
+        kernel.SetConsoleMode.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel.SetConsoleMode.restype = wintypes.BOOL
+        handle = kernel.GetStdHandle(0xFFFFFFF5)  # STD_OUTPUT_HANDLE (-11)
+        mode = wintypes.DWORD()
+        if kernel.GetConsoleMode(handle, ctypes.byref(mode)):
+            _WINDOWS_ANSI_ENABLED = bool(
+                kernel.SetConsoleMode(handle, mode.value | 0x0004)
+            )
+    except (OSError, AttributeError):
+        _WINDOWS_ANSI_ENABLED = False
+
+
 def supports_color():
-    if os.environ.get("NO_COLOR"):
+    if "NO_COLOR" in os.environ or not sys.stdout.isatty():
         return False
+    return os.name != "nt" or _WINDOWS_ANSI_ENABLED
 
-    return os.name == "nt" or sys.stdout.isatty()
 
-
-def color(text, color_code):
-    text = str(text)
-
+def color(text, code):
     if not supports_color():
-        return text
-
-    return f"{color_code}{text}{Colors.RESET}"
+        return str(text)
+    return f"{code}{text}{Colors.RESET}"
 
 
 def timestamp_now():
@@ -64,1040 +93,683 @@ def timestamp_now():
 
 def show_about():
     print(
-        f"""
-TAPING v{VERSION}
-Tiny range ping and TCP port ping helper for Windows.
-
-Author:
-  {AUTHOR}
-
-Original project:
-  {REPOSITORY}
-
-License:
-  MIT
-
-Copyright:
-  Copyright (c) 2026 Selahattin Acikgoz
-""".strip()
+        f"TAPING v{VERSION}\n"
+        "ICMP ping, TCP port test and traceroute.\n\n"
+        f"Author: {AUTHOR}\n"
+        f"Project: {REPOSITORY}\n"
+        "License: MIT\n"
+        "Copyright (c) 2026 Selahattin Acikgoz"
     )
 
 
 def show_help():
-    print(
-        f"""
-taping v{VERSION} - Range ping and TCP port ping helper
+    print(f"""taping v{VERSION} - Ping, TCP port test and traceroute
 
-TAPING helps you quickly check ICMP reachability and TCP port connectivity
-for a single IPv4 address, DNS hostname, or IPv4 range.
-
-Syntax:
-  taping [options] <ip-address-or-hostname>
+Usage:
+  taping <ip-or-hostname> [options]
   taping range <start-end> [options]
+  taping trace <ip-or-hostname> [-p PORT] [-w MS]
   taping about
 
-Basic usage:
-  taping 192.168.1.1
-  taping google.com
-  taping range 192.168.1.10-20
-  taping 192.168.1.1 -p 443
-  taping google.com --https
-  taping range 192.168.1.10-20 -p 3389
-
 Options:
-  -?, /?, -h, -help, --help
-        Display this help screen
-
-  -p, --port PORT
-        Set TCP port to check.
-        Example: taping google.com -p 443
-
-  -t, --loop
-        Run continuously until CTRL+C.
-        Similar to the Windows ping -t option.
-        Example: taping google.com -t
-
-  -w, --timeout MS
-        Set timeout in milliseconds.
-        Default: {DEFAULT_TIMEOUT_MS} for all ICMP and TCP checks.
-        Example: taping google.com -w 2000
-
-  -c, --count COUNT
-        Set number of checks.
-        Default: 1
-        Example: taping 192.168.1.1 -c 5
-
-  -i, --interval MS
-        Delay between check rounds in milliseconds.
-        Default: {DEFAULT_INTERVAL_MS}
-        Example: taping 192.168.1.1 -c 10 -i 1000
-
-  --up
-        Show only successful results.
-
-  --version
-        Show TAPING version.
-
-Service shortcuts:
-  --http      TCP 80
-  --https     TCP 443
-  --ssh       TCP 22
-  --rdp       TCP 3389
-  --smb       TCP 445
-  --zebra     TCP 9100
-  --winrm     TCP 5985
-  --winrms    TCP 5986
+  -p, --port PORT     Test a TCP port instead of ICMP (1-65535)
+  -t, --loop          Repeat until CTRL+C
+  -w, --timeout MS    Timeout in milliseconds (default: {DEFAULT_TIMEOUT_MS})
+  -c, --count COUNT   Number of checks (default: 1)
+  -?, -h, --help      Show this help
 
 Examples:
+  taping 8.8.8.8
   taping google.com -t
-  taping google.com -t -w 2000
-  taping 8.8.8.8 -c 10
-  taping google.com
-  taping microsoft.com -c 10
-  taping google.com --loop
-  taping 1.1.1.1 -p 443
-  taping google.com --https
-  taping 192.168.10.36 --rdp
-  taping 192.168.110.117 --zebra
-  taping range 192.168.70.160-169
-  taping range 192.168.70.160-169 -p 3389
-  taping range 192.168.70.160-169 -p 3389 -c 3
-  taping range 192.168.70.160-169 -p 3389 --loop
+  taping 8.8.8.8 -c 5 -w 2000
+  taping google.com -p 443
+  taping range 192.168.1.10-20
+  taping range 192.168.1.10-20 -p 3389
+  taping trace 8.8.8.8
+  taping trace 10.6.106.50 -p 443
 
 Notes:
-  ICMP ping does not use ports.
-  TCP port mode works similar to paping.
-  Hostnames are resolved to IPv4 before the check starts.
-  Every result line includes a local timestamp.
-  SNMP usually uses UDP 161, so "-p 161" checks TCP/161, not SNMP.
-""".strip()
-    )
+  -p checks TCP (not UDP). Without -p, ping uses ICMP.
+  Range ICMP automatically retries missed replies (up to 4 attempts per IP).
+  TCP traceroute requires Administrator on Windows (root/CAP_NET_RAW on Linux).
+  IPv4 only. CTRL+C stops continuous ping.
+""".rstrip())
 
 
 def is_valid_ip(ip):
-    parts = ip.split(".")
-
-    if len(parts) != 4:
+    try:
+        ipaddress.IPv4Address(ip)
+    except (ipaddress.AddressValueError, ValueError, TypeError):
         return False
-
-    for part in parts:
-        if not part.isdigit():
-            return False
-
-        if not 0 <= int(part) <= 255:
-            return False
-
     return True
 
 
 def resolve_target(target):
     target = target.strip()
-
     if not target:
         raise ValueError("Target cannot be empty.")
-
     if is_valid_ip(target):
         return target
-
-    if re.fullmatch(r"[0-9.]+", target):
+    if all(char.isdigit() or char == "." for char in target):
         raise ValueError(f"Invalid IPv4 address: {target}")
-
     try:
-        results = socket.getaddrinfo(
-            target,
-            None,
-            family=socket.AF_INET,
-            type=socket.SOCK_STREAM,
-        )
-
-    except socket.gaierror as error:
-        raise ValueError(
-            f"Could not resolve hostname: {target}"
-        ) from error
-
+        results = socket.getaddrinfo(target, None, family=socket.AF_INET,
+                                      type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ValueError(f"Could not resolve hostname: {target}") from exc
     for result in results:
-        resolved_ip = result[4][0]
-
-        if is_valid_ip(resolved_ip):
-            return resolved_ip
-
-    raise ValueError(
-        f"No IPv4 address found for hostname: {target}"
-    )
+        ip = result[4][0]
+        if is_valid_ip(ip):
+            return ip
+    raise ValueError(f"No IPv4 address found for hostname: {target}")
 
 
-def format_target_display(target, resolved_ip):
-    if target == resolved_ip:
-        return target
-
-    return f"{target} [{resolved_ip}]"
+def format_target_display(target, ip):
+    return target if target == ip else f"{target} [{ip}]"
 
 
-def parse_range(range_text):
-    match = re.match(
-        r"^(\d{1,3}\.\d{1,3}\.\d{1,3})\.(\d{1,3})-(\d{1,3})$",
-        range_text,
-    )
-
+def parse_range(value):
+    match = re.fullmatch(r"([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\.([0-9]{1,3})-([0-9]{1,3})", value)
     if not match:
-        raise ValueError(
-            "Invalid range format. "
-            "Example: taping range 192.168.1.10-20"
-        )
-
-    network_part = match.group(1)
-    start = int(match.group(2))
-    end = int(match.group(3))
-
+        raise ValueError("Invalid range format. Example: taping range 192.168.1.10-20")
+    prefix, start_text, end_text = match.groups()
+    start, end = int(start_text), int(end_text)
     if start > end:
-        raise ValueError(
-            "Range start cannot be greater than range end."
-        )
-
+        raise ValueError("Range start cannot be greater than range end.")
     if start < 0 or end > 255:
-        raise ValueError(
-            "Last octet must be between 0 and 255."
-        )
-
-    targets = []
-
-    for last_octet in range(start, end + 1):
-        ip = f"{network_part}.{last_octet}"
-
-        if not is_valid_ip(ip):
-            raise ValueError(
-                f"Invalid IP generated: {ip}"
-            )
-
-        targets.append(ip)
-
-    return targets
+        raise ValueError("Last octet must be between 0 and 255.")
+    result = [f"{prefix}.{last}" for last in range(start, end + 1)]
+    if not all(is_valid_ip(ip) for ip in result):
+        raise ValueError("Invalid IP address in range.")
+    return result
 
 
 def parse_ttl(output):
-    match = re.search(
-        r"ttl[=\s:]+(\d+)",
-        output,
-        re.IGNORECASE,
-    )
-
-    if match:
-        return int(match.group(1))
-
-    return None
+    match = re.search(r"ttl[=\s:]+(\d+)", output, re.IGNORECASE)
+    return int(match.group(1)) if match else None
 
 
 def parse_time_ms(output):
-    patterns = [
+    for pattern in (
         r"time[=<]\s*(\d+(?:\.\d+)?)\s*ms",
         r"süre[=<]\s*(\d+(?:\.\d+)?)\s*ms",
         r"temps[=<]\s*(\d+(?:\.\d+)?)\s*ms",
         r"zeit[=<]\s*(\d+(?:\.\d+)?)\s*ms",
         r"tiempo[=<]\s*(\d+(?:\.\d+)?)\s*ms",
         r"tempo[=<]\s*(\d+(?:\.\d+)?)\s*ms",
-    ]
-
-    for pattern in patterns:
-        match = re.search(
-            pattern,
-            output,
-            re.IGNORECASE,
-        )
-
+    ):
+        match = re.search(pattern, output, re.IGNORECASE)
         if match:
             return float(match.group(1))
-
-    lower_output = output.lower()
-
-    less_than_one_patterns = (
-        "time<1ms",
-        "süre<1ms",
-        "temps<1ms",
-        "zeit<1ms",
-        "tiempo<1ms",
-        "tempo<1ms",
-    )
-
-    if any(
-        pattern in lower_output
-        for pattern in less_than_one_patterns
-    ):
+    if re.search(r"(?:time|süre|temps|zeit|tiempo|tempo)\s*<\s*1\s*ms", output, re.IGNORECASE):
         return 0.0
-
     return None
 
 
-def is_icmp_success(output):
-    failure_messages = (
-        "ttl expired",
-        "expired in transit",
-        "destination host unreachable",
-        "destination net unreachable",
-        "request timed out",
-        "timed out",
-    )
-
-    payload_patterns = (
-        "bytes=",
-        "bytes<",
-        "bayt=",
-        "bayt<",
-        "octets=",
-        "octets<",
-    )
-
-    for line in output.splitlines():
-        lower_line = line.lower()
-
-        if any(
-            message in lower_line
-            for message in failure_messages
-        ):
-            continue
-
-        has_ttl = re.search(
-            r"ttl[=\s:]+\d+",
-            lower_line,
-        ) is not None
-
-        has_payload = any(
-            payload in lower_line
-            for payload in payload_patterns
-        )
-
-        if has_ttl and has_payload:
-            return True
-
-    return False
-
-
 def format_ms(value):
-    if value is None:
-        return "0.00ms"
-
-    return f"{value:.2f}ms"
+    return "0.00ms" if value is None else f"{value:.2f}ms"
 
 
 def new_stats():
-    return {
-        "attempted": 0,
-        "connected": 0,
-        "failed": 0,
-        "times": [],
-    }
+    return {"attempted": 0, "connected": 0, "failed": 0, "times": []}
 
 
-def add_stats(stats, success, time_ms):
+def add_stats(stats, success, duration_ms):
     stats["attempted"] += 1
-
     if success:
         stats["connected"] += 1
-
-        if time_ms is not None:
-            stats["times"].append(
-                float(time_ms)
-            )
-
+        if duration_ms is not None:
+            stats["times"].append(float(duration_ms))
     else:
         stats["failed"] += 1
 
 
 def print_connection_statistics(stats):
-    attempted = stats["attempted"]
-    connected = stats["connected"]
-    failed = stats["failed"]
-
-    failed_percent = (
-        0.00
-        if attempted == 0
-        else (failed / attempted) * 100
-    )
-
-    if stats["times"]:
-        minimum = min(stats["times"])
-        maximum = max(stats["times"])
-        average = (
-            sum(stats["times"])
-            / len(stats["times"])
-        )
-
-    else:
-        minimum = 0.00
-        maximum = 0.00
-        average = 0.00
-
-    print("")
-    print("Connection statistics:")
-    print(
-        f"        Attempted = "
-        f"{color(attempted, Colors.CYAN)}, "
-        f"Connected = "
-        f"{color(connected, Colors.GREEN)}, "
-        f"Failed = "
-        f"{color(failed, Colors.RED)} "
-        f"({failed_percent:.2f}%)"
-    )
-
+    attempted, connected, failed = (stats[k] for k in ("attempted", "connected", "failed"))
+    fail_percent = failed / attempted * 100 if attempted else 0
+    times = stats["times"]
+    low, high, mean = (min(times), max(times), sum(times) / len(times)) if times else (0, 0, 0)
+    print("\nConnection statistics:")
+    print(f"        Attempted = {color(attempted, Colors.CYAN)}, "
+          f"Connected = {color(connected, Colors.GREEN)}, "
+          f"Failed = {color(failed, Colors.RED)} ({fail_percent:.2f}%)")
     print("Approximate connection times:")
-    print(
-        f"        Minimum = "
-        f"{color(format_ms(minimum), Colors.CYAN)}, "
-        f"Maximum = "
-        f"{color(format_ms(maximum), Colors.CYAN)}, "
-        f"Average = "
-        f"{color(format_ms(average), Colors.CYAN)}"
-    )
+    print(f"        Minimum = {color(format_ms(low), Colors.CYAN)}, "
+          f"Maximum = {color(format_ms(high), Colors.CYAN)}, "
+          f"Average = {color(format_ms(mean), Colors.CYAN)}")
 
 
-def print_result(
-    target,
-    status,
-    message,
-    successful=False,
-):
-    line_color = (
-        Colors.GREEN
-        if successful
-        else Colors.RED
-    )
-
-    timestamp_text = color(
-        timestamp_now(),
-        Colors.GRAY,
-    )
-
-    target_text = color(
-        f"{target:<42}",
-        line_color,
-    )
-
-    status_text = color(
-        f"{status:<10}",
-        line_color,
-    )
-
-    print(
-        f"{timestamp_text}  "
-        f"{target_text} "
-        f"{status_text} "
-        f"{message}"
-    )
+def print_result(target, status, message, successful=False):
+    display_color = Colors.GREEN if successful else Colors.RED
+    print(f"{color(timestamp_now(), Colors.GRAY)}  "
+          f"{color(f'{target:<42}', display_color)} "
+          f"{color(f'{status:<10}', display_color)} {message}")
 
 
-def icmp_ping(
-    ip,
-    display_target,
-    timeout_ms,
-    show_success_only=False,
-):
-    cmd = [
-        "ping",
-        "-4",
-        "-n",
-        "1",
-        "-w",
-        str(timeout_ms),
-        ip,
+class _IpOptionInformation(ctypes.Structure):
+    _fields_ = [
+        ("Ttl", ctypes.c_ubyte),
+        ("Tos", ctypes.c_ubyte),
+        ("Flags", ctypes.c_ubyte),
+        ("OptionsSize", ctypes.c_ubyte),
+        ("OptionsData", ctypes.c_void_p),
     ]
 
-    start_time = time.perf_counter()
 
+class _IcmpEchoReply(ctypes.Structure):
+    _fields_ = [
+        ("Address", wintypes.ULONG),
+        ("Status", wintypes.ULONG),
+        ("RoundTripTime", wintypes.ULONG),
+        ("DataSize", wintypes.USHORT),
+        ("Reserved", wintypes.USHORT),
+        ("Data", ctypes.c_void_p),
+        ("Options", _IpOptionInformation),
+    ]
+
+
+@lru_cache(maxsize=1)
+def _windows_icmp_api():
+    """Load built-in Windows ICMP API (no external Python packages)."""
+    library = ctypes.WinDLL("iphlpapi.dll", use_last_error=True)
+    create = library.IcmpCreateFile
+    create.restype = wintypes.HANDLE
+    send = library.IcmpSendEcho
+    send.argtypes = [
+        wintypes.HANDLE, wintypes.ULONG, ctypes.c_void_p, wintypes.WORD,
+        ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+    ]
+    send.restype = wintypes.DWORD
+    close = library.IcmpCloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    return create, send, close
+
+
+def _probe_icmp_windows(ip, timeout_ms):
+    """ICMP via IcmpSendEcho: independent of Windows UI language/code page."""
+    create, send, close = _windows_icmp_api()
+    handle = create()
+    if handle in (None, ctypes.c_void_p(-1).value):
+        return "ERROR", None, None, "IcmpCreateFile failed"
+    payload = ctypes.create_string_buffer(b"taping-ping")
+    buffer = ctypes.create_string_buffer(
+        ctypes.sizeof(_IcmpEchoReply) + len(payload) + 32
+    )
+    destination = int.from_bytes(socket.inet_aton(ip), sys.byteorder)
+    try:
+        count = send(
+            handle, destination, ctypes.cast(payload, ctypes.c_void_p),
+            len(payload) - 1, None, ctypes.cast(buffer, ctypes.c_void_p),
+            len(buffer), timeout_ms,
+        )
+        if count:
+            reply = ctypes.cast(buffer, ctypes.POINTER(_IcmpEchoReply)).contents
+            if reply.Status == 0:  # IP_SUCCESS
+                return "UP", float(reply.RoundTripTime), int(reply.Options.Ttl), ""
+            return "DOWN", None, None, f"ICMP status {reply.Status}"
+        error = ctypes.get_last_error()
+        if error in (0, 11010):  # IP_REQ_TIMED_OUT
+            return "DOWN", None, None, "No reply"
+        if error in (11002, 11003, 11004, 11005, 11012, 11013):
+            return "DOWN", None, None, f"ICMP status {error}"
+        return "ERROR", None, None, f"IcmpSendEcho failed (error {error})"
+    finally:
+        close(handle)
+
+
+def probe_icmp(ip, timeout_ms):
+    """Return (status, latency_ms, ttl, message), without printing."""
+    if os.name == "nt":
+        try:
+            return _probe_icmp_windows(ip, timeout_ms)
+        except (OSError, AttributeError) as exc:
+            return "ERROR", None, None, f"Windows ICMP API error: {exc}"
+
+    # Linux/other: rely on ping's exit status, not translated output strings.
+    command = [
+        "ping", "-4", "-n", "-c", "1", "-W",
+        f"{timeout_ms / 1000:g}", ip,
+    ]
+    started = time.perf_counter()
     try:
         result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            errors="replace",
+            command, capture_output=True, text=True, errors="replace",
             timeout=(timeout_ms / 1000) + 3,
         )
-
-        elapsed_ms = round(
-            (
-                time.perf_counter()
-                - start_time
-            ) * 1000,
-            2,
-        )
-
-        output = (
-            (result.stdout or "")
-            + "\n"
-            + (result.stderr or "")
-        )
-
-        success = (
-            result.returncode == 0
-            and is_icmp_success(output)
-        )
-
-        if success:
-            ttl = parse_ttl(output)
-            ping_time = parse_time_ms(output)
-
-            if ping_time is None:
-                ping_time = elapsed_ms
-
-            message = color(
-                format_ms(ping_time),
-                Colors.CYAN,
-            )
-
-            if ttl is not None:
-                message += f" TTL={ttl}"
-
-            print_result(
-                display_target,
-                "UP",
-                message,
-                successful=True,
-            )
-
-            return True, ping_time
-
-        if not show_success_only:
-            print_result(
-                display_target,
-                "DOWN",
-                "No reply",
-            )
-
-        return False, None
-
     except subprocess.TimeoutExpired:
-        if not show_success_only:
-            print_result(
-                display_target,
-                "TIMEOUT",
-                "Ping process timeout",
-            )
-
-        return False, None
-
-    except Exception as error:
-        if not show_success_only:
-            print_result(
-                display_target,
-                "ERROR",
-                str(error),
-            )
-
-        return False, None
+        return "TIMEOUT", None, None, "Ping process timeout"
+    except OSError as exc:
+        return "ERROR", None, None, str(exc)
+    if result.returncode == 0:
+        output = result.stdout or ""
+        latency = parse_time_ms(output)
+        if latency is None:
+            latency = round((time.perf_counter() - started) * 1000, 2)
+        return "UP", latency, parse_ttl(output), ""
+    return "DOWN", None, None, "No reply"
 
 
-def tcp_ping(
-    ip,
-    display_target,
-    port,
-    timeout_ms,
-    show_success_only=False,
-):
-    start_time = time.perf_counter()
-    target_text = f"{display_target}:{port}"
+def show_icmp_probe_result(display_target, status, duration, ttl, message, attempts=1):
+    if status == "UP":
+        detail = color(format_ms(duration), Colors.CYAN)
+        if ttl is not None:
+            detail += f" TTL={ttl}"
+        if attempts > 1:
+            detail += f" (recovered on attempt {attempts}/{len(RANGE_PROBE_TIMEOUTS_MS)})"
+        print_result(display_target, "UP", detail, successful=True)
+    else:
+        if attempts > 1:
+            message += f" (after {attempts} attempts)"
+        print_result(display_target, status, message)
 
+
+def icmp_ping(ip, display_target, timeout_ms):
+    """Unchanged single-host semantics: one echo per requested ping."""
+    status, duration, ttl, message = probe_icmp(ip, timeout_ms)
+    show_icmp_probe_result(display_target, status, duration, ttl, message)
+    return status == "UP", duration
+
+
+def probe_icmp_range_host(ip, timeout_ms):
+    """Probe a range IP up to four times, stopping at the first Echo Reply.
+
+    Probe 1 uses up to 800ms, then up to 1200ms and 2000ms. The last
+    attempt honors the full requested timeout. Only unsuccessful attempts
+    incur the small delay; an answering host is returned immediately.
+    """
+    for index, short_timeout in enumerate(RANGE_PROBE_TIMEOUTS_MS):
+        if index:
+            time.sleep(RANGE_RETRY_DELAYS_MS[index - 1] / 1000)
+        effective_timeout = min(timeout_ms, short_timeout) if short_timeout else timeout_ms
+        status, duration, ttl, message = probe_icmp(ip, effective_timeout)
+        if status in ("UP", "ERROR"):
+            return status, duration, ttl, message, index + 1
+    return status, duration, ttl, message, len(RANGE_PROBE_TIMEOUTS_MS)
+
+
+def tcp_ping(ip, display_target, port, timeout_ms):
+    started = time.perf_counter()
+    target = f"{display_target}:{port}"
     try:
-        with socket.create_connection(
-            (ip, port),
-            timeout=timeout_ms / 1000,
-        ):
-            elapsed_ms = round(
-                (
-                    time.perf_counter()
-                    - start_time
-                ) * 1000,
-                2,
-            )
-
-            message = (
-                f"time="
-                f"{color(format_ms(elapsed_ms), Colors.CYAN)} "
-                f"protocol="
-                f"{color('TCP', Colors.GREEN)} "
-                f"port="
-                f"{color(port, Colors.GREEN)}"
-            )
-
-            print_result(
-                target_text,
-                "OPEN",
-                message,
-                successful=True,
-            )
-
-            return True, elapsed_ms
-
+        with socket.create_connection((ip, port), timeout=timeout_ms / 1000):
+            duration = round((time.perf_counter() - started) * 1000, 2)
+            message = (f"time={color(format_ms(duration), Colors.CYAN)} "
+                       f"protocol={color('TCP', Colors.GREEN)} "
+                       f"port={color(port, Colors.GREEN)}")
+            print_result(target, "OPEN", message, successful=True)
+            return True, duration
     except socket.timeout:
-        if not show_success_only:
-            print_result(
-                target_text,
-                "TIMEOUT",
-                "Connection timed out",
-            )
-
-        return False, None
-
+        print_result(target, "TIMEOUT", "Connection timed out")
     except ConnectionRefusedError:
-        elapsed_ms = round(
-            (
-                time.perf_counter()
-                - start_time
-            ) * 1000,
-            2,
-        )
-
-        if not show_success_only:
-            message = (
-                f"Connection refused "
-                f"time="
-                f"{color(format_ms(elapsed_ms), Colors.CYAN)}"
-            )
-
-            print_result(
-                target_text,
-                "CLOSED",
-                message,
-            )
-
-        return False, elapsed_ms
-
-    except Exception as error:
-        if not show_success_only:
-            print_result(
-                target_text,
-                "ERROR",
-                str(error),
-            )
-
-        return False, None
-
-
-def get_service_port(args):
-    selected_services = []
-
-    for service_name, port in SERVICE_PORTS.items():
-        if getattr(args, service_name):
-            selected_services.append(
-                (service_name, port)
-            )
-
-    if len(selected_services) > 1:
-        raise ValueError(
-            "Only one service shortcut "
-            "can be used at a time."
-        )
-
-    if selected_services and args.port:
-        raise ValueError(
-            "Do not use -p together "
-            "with a service shortcut."
-        )
-
-    if selected_services:
-        return selected_services[0][1]
-
-    return args.port
+        elapsed = round((time.perf_counter() - started) * 1000, 2)
+        print_result(target, "CLOSED", f"Connection refused time={color(format_ms(elapsed), Colors.CYAN)}")
+        return False, elapsed
+    except OSError as exc:
+        print_result(target, "ERROR", str(exc))
+    return False, None
 
 
 def print_header(target_text, port):
-    if port is not None:
-        print(
-            f"Connecting to "
-            f"{color(target_text, Colors.YELLOW)} "
-            f"on "
-            f"{color('TCP', Colors.YELLOW)} "
-            f"{color(port, Colors.YELLOW)}:"
-        )
-
+    if port is None:
+        print(f"Pinging {color(target_text, Colors.YELLOW)} using "
+              f"{color('ICMP', Colors.YELLOW)}:\n")
     else:
-        print(
-            f"Pinging "
-            f"{color(target_text, Colors.YELLOW)} "
-            f"using "
-            f"{color('ICMP', Colors.YELLOW)}:"
-        )
+        print(f"Connecting to {color(target_text, Colors.YELLOW)} on "
+              f"{color('TCP', Colors.YELLOW)} {color(port, Colors.YELLOW)}:\n")
 
-    print("")
+
+
+def trace_route(ip, display_target, port, timeout_ms):
+    """Run native ICMP trace or TCP trace, returning a command success flag."""
+    if port is None:
+        return icmp_trace(ip, display_target, timeout_ms)
+    return tcp_trace(ip, display_target, port, timeout_ms)
+
+
+def icmp_trace(ip, display_target, timeout_ms):
+    """Stream native traceroute; confirm the destination appears in a hop line."""
+    if os.name == "nt":
+        command = ["tracert", "-4", "-d", "-h", str(MAX_TRACE_HOPS),
+                   "-w", str(timeout_ms), ip]
+    else:
+        command = ["traceroute", "-4", "-n", "-I", "-m", str(MAX_TRACE_HOPS),
+                   "-w", str(timeout_ms / 1000), ip]
+    try:
+        found_destination = False
+        with subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, errors="replace",
+        ) as process:
+            for line in process.stdout:
+                print(line, end="")
+                # Do not count the command's heading (which contains the target).
+                if re.match(r"^\s*\d+\s+", line) and re.search(
+                    r"(?<![\d.])" + re.escape(ip) + r"(?![\d.])", line
+                ):
+                    found_destination = True
+            return_code = process.wait()
+        if return_code != 0:
+            return 1  # traceroute executable reported an execution error
+        return 0 if found_destination else 2
+    except FileNotFoundError:
+        print("Traceroute command not found. Install the system traceroute utility.", file=sys.stderr)
+    except KeyboardInterrupt:
+        print("\nTrace interrupted.", file=sys.stderr)
+    except OSError as exc:
+        print(f"Traceroute error: {exc}", file=sys.stderr)
+    return 1
+
+
+def local_ipv4_for_destination(ip, port):
+    """Find the local IPv4 chosen by the routing table (UDP connect sends no data)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.connect((ip, port))
+        return sock.getsockname()[0]
+
+
+def open_icmp_receiver(local_ip):
+    """Start capturing ICMP on Windows and Linux; caller must close receiver."""
+    receiver = None
+    try:
+        if os.name == "nt":
+            # A plain IPPROTO_ICMP receiver can miss Windows TTL-exceeded replies.
+            # RCVALL captures the reply's IPv4 packet for strict probe matching.
+            receiver = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
+            receiver.bind((local_ip, 0))
+            receiver.ioctl(socket.SIO_RCVALL, socket.RCVALL_ON)
+        else:
+            receiver = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+            receiver.bind((local_ip, 0))
+        receiver.setblocking(False)
+        return receiver
+    except OSError:
+        if receiver is not None:
+            receiver.close()
+        raise
+
+
+def close_icmp_receiver(receiver):
+    if receiver is None:
+        return
+    try:
+        if os.name == "nt":
+            receiver.ioctl(socket.SIO_RCVALL, socket.RCVALL_OFF)
+    except OSError:
+        pass
+    finally:
+        receiver.close()
+
+
+def decode_icmp_reply(packet, destination_ip, source_port, destination_port):
+    """Parse only ICMP errors containing *this exact TCP probe*.
+
+    Returns (kind, code) or None. Verify IPv4 headers, protocol, destination,
+    and embedded TCP ports to reject unrelated network traffic.
+    """
+    if len(packet) < 20 or packet[0] >> 4 != 4:
+        return None
+    outer_len = (packet[0] & 0x0F) * 4
+    if outer_len < 20 or len(packet) < outer_len + 8 + 20 + 8:
+        return None
+    if packet[9] != socket.IPPROTO_ICMP:
+        return None
+    icmp_type, icmp_code = packet[outer_len], packet[outer_len + 1]
+    if icmp_type not in (3, 11):
+        return None
+    embedded_start = outer_len + 8
+    if packet[embedded_start] >> 4 != 4:
+        return None
+    embedded_len = (packet[embedded_start] & 0x0F) * 4
+    if embedded_len < 20 or len(packet) < embedded_start + embedded_len + 4:
+        return None
+    if packet[embedded_start + 9] != socket.IPPROTO_TCP:
+        return None
+    if socket.inet_ntoa(packet[embedded_start + 16: embedded_start + 20]) != destination_ip:
+        return None
+    offset = embedded_start + embedded_len
+    probe_source_port, probe_dest_port = struct.unpack_from("!HH", packet, offset)
+    if probe_source_port != source_port or probe_dest_port != destination_port:
+        return None
+    if icmp_type == 11 and icmp_code == 0:
+        return "TTL_EXCEEDED", icmp_code
+    if icmp_type == 3:
+        return "UNREACHABLE", icmp_code
+    return None
+
+
+def probe_tcp_hop(receiver, local_ip, destination_ip, destination_port, ttl, timeout_seconds):
+    """One TCP connection attempt with a low TTL.
+
+    Returns (hop_ip or None, rtt_ms or None, status).
+    A TCP connection or refusal from the target means the target was reached.
+    """
+    start = time.perf_counter()
+    deadline = start + timeout_seconds
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP) as probe:
+        probe.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
+        probe.bind((local_ip, 0))
+        source_port = probe.getsockname()[1]
+        probe.setblocking(False)
+        result = probe.connect_ex((destination_ip, destination_port))
+        if result == 0:
+            return destination_ip, (time.perf_counter() - start) * 1000, "OPEN"
+        if result in (errno.ECONNREFUSED, 10061):
+            return destination_ip, (time.perf_counter() - start) * 1000, "CLOSED"
+        in_progress = {errno.EINPROGRESS, errno.EWOULDBLOCK, errno.EALREADY, 10035, 10036, 10037}
+        if result not in in_progress:
+            return None, None, f"SOCKET_ERROR:{result}"
+
+        watch_write = True
+        while True:
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                return None, None, "TIMEOUT"
+            # The TCP socket may be writable before a router's ICMP reply arrives.
+            # For non-terminal SO_ERROR values, keep listening until timeout.
+            readable, writable, _ = select.select(
+                [receiver], [probe] if watch_write else [], [], remaining
+            )
+            if readable:
+                try:
+                    payload, sender = receiver.recvfrom(65535)
+                except BlockingIOError:
+                    continue
+                decoded = decode_icmp_reply(payload, destination_ip, source_port, destination_port)
+                if decoded is not None:
+                    elapsed = round((time.perf_counter() - start) * 1000, 2)
+                    kind, code = decoded
+                    return sender[0], elapsed, kind if kind == "TTL_EXCEEDED" else f"UNREACHABLE:{code}"
+            if writable:
+                err = probe.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                if err == 0:
+                    elapsed = round((time.perf_counter() - start) * 1000, 2)
+                    return destination_ip, elapsed, "OPEN"
+                if err in (errno.ECONNREFUSED, 10061):
+                    elapsed = round((time.perf_counter() - start) * 1000, 2)
+                    return destination_ip, elapsed, "CLOSED"
+                watch_write = False
+
+
+def tcp_trace(ip, display_target, port, timeout_ms):
+    print(f"Tracing route to {display_target} using TCP/{port} (max {MAX_TRACE_HOPS} hops):\n")
+    print("Hop  IP address          Time       Status")
+    receiver = None
+    try:
+        local_ip = local_ipv4_for_destination(ip, port)
+        receiver = open_icmp_receiver(local_ip)
+        for hop in range(1, MAX_TRACE_HOPS + 1):
+            address, rtt_ms, status = probe_tcp_hop(
+                receiver, local_ip, ip, port, hop, timeout_ms / 1000
+            )
+            if status.startswith("SOCKET_ERROR:"):
+                print(f"{hop:<4} {'*':<19} {'-':<10} {status}")
+                return 1
+            latency = f"{rtt_ms:.2f}ms" if rtt_ms is not None else "*"
+            print(f"{hop:<4} {(address or '*'):<19} {latency:<10} {status}", flush=True)
+            if status in ("OPEN", "CLOSED"):
+                print(f"\nDestination reached (TCP/{port}: {status}).")
+                return 0
+            if status.startswith("UNREACHABLE:"):
+                print("\nNetwork reported destination unreachable.")
+                return 2
+        print(f"\nDestination not confirmed within {MAX_TRACE_HOPS} hops.")
+        return 2
+    except PermissionError:
+        if os.name == "nt":
+            print("TCP traceroute requires an Administrator terminal on Windows.", file=sys.stderr)
+        else:
+            print("TCP traceroute requires root or CAP_NET_RAW on Linux.", file=sys.stderr)
+    except KeyboardInterrupt:
+        print("Trace interrupted.", file=sys.stderr)
+    except OSError as exc:
+        print(f"TCP traceroute error: {exc}", file=sys.stderr)
+        if os.name == "nt":
+            print("Raw socket capture may be blocked by Windows or security policy.", file=sys.stderr)
+    finally:
+        close_icmp_receiver(receiver)
+    return 1
+
+
+class _TapingArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        self.exit(1, f"taping: error: {message}\n")
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(
-        add_help=False
-    )
-
-    parser.add_argument(
-        "target",
-        nargs="?",
-    )
-
-    parser.add_argument(
-        "value",
-        nargs="?",
-    )
-
-    parser.add_argument(
-        "-?",
-        "-h",
-        "-help",
-        "--help",
-        action="store_true",
-        dest="help_flag",
-    )
-
-    parser.add_argument(
-        "-p",
-        "--port",
-        type=int,
-    )
-
-    parser.add_argument(
-        "-w",
-        "--timeout",
-        type=int,
-    )
-
-    parser.add_argument(
-        "-c",
-        "--count",
-        type=int,
-        default=1,
-    )
-
-    parser.add_argument(
-        "-i",
-        "--interval",
-        type=int,
-        default=DEFAULT_INTERVAL_MS,
-    )
-
-    parser.add_argument(
-        "-t",
-        "--loop",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--up",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--version",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--http",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--https",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--ssh",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--rdp",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--smb",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--zebra",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--winrm",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--winrms",
-        action="store_true",
-    )
-
+    parser = _TapingArgumentParser(prog="taping", add_help=False, allow_abbrev=False)
+    parser.add_argument("target", nargs="?")
+    parser.add_argument("value", nargs="?")
+    parser.add_argument("-?", "-h", "-help", "--help", action="store_true", dest="help_flag")
+    parser.add_argument("-p", "--port", type=int)
+    parser.add_argument("-w", "--timeout", type=int)
+    parser.add_argument("-c", "--count", type=int, default=1)
+    parser.add_argument("-t", "--loop", action="store_true")
     return parser
 
 
-def get_timeout_ms(args):
-    if args.timeout is not None:
-        return args.timeout
-
-    return DEFAULT_TIMEOUT_MS
-
-
-def wait_for_next_round(round_started_at, interval_ms):
-    if interval_ms <= 0:
-        return
-
-    elapsed_ms = (
-        time.perf_counter() - round_started_at
-    ) * 1000
-
-    remaining_ms = interval_ms - elapsed_ms
-
-    if remaining_ms > 0:
-        time.sleep(remaining_ms / 1000)
+def wait_for_next_round(started_at):
+    remaining = DEFAULT_INTERVAL_MS / 1000 - (time.perf_counter() - started_at)
+    if remaining > 0:
+        time.sleep(remaining)
 
 
-def main():
-    os.system("")
-
+def main(argv=None):
+    enable_console_colors()
     parser = build_parser()
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        return int(exc.code)
 
-    if args.version:
-        print(f"taping {VERSION}")
-        return 0
-
-    if (
-        args.help_flag
-        or not args.target
-        or args.target.lower()
-        in ["help", "/?"]
-    ):
+    if args.help_flag or args.target is None or args.target.lower() in ("help", "/?"):
         show_help()
         return 0
-
     if args.target.lower() == "about":
+        if args.value:
+            print(f"Unexpected value: {args.value}", file=sys.stderr)
+            return 1
         show_about()
         return 0
-
-    if (
-        args.timeout is not None
-        and args.timeout < 100
-    ):
-        print(
-            "Timeout must be at least 100 ms."
-        )
-
+    if args.timeout is not None and args.timeout < MIN_TIMEOUT_MS:
+        print("Timeout must be at least 100 ms.", file=sys.stderr)
         return 1
-
     if args.count < 1:
-        print(
-            "Count must be at least 1."
-        )
-
+        print("Count must be at least 1.", file=sys.stderr)
         return 1
-
-    if args.interval < 0:
-        print(
-            "Interval cannot be negative."
-        )
-
+    if args.port is not None and not (1 <= args.port <= MAX_TCP_PORT):
+        print("Port must be between 1 and 65535.", file=sys.stderr)
         return 1
+    timeout_ms = args.timeout if args.timeout is not None else DEFAULT_TIMEOUT_MS
 
-    try:
-        port = get_service_port(args)
+    if args.target.lower() == "trace":
+        if not args.value:
+            print("Trace target is missing. Example: taping trace google.com -p 443", file=sys.stderr)
+            return 1
+        if args.loop or args.count != 1:
+            print("-t/--loop and -c are not supported in trace mode.", file=sys.stderr)
+            return 1
+        try:
+            ip = resolve_target(args.value)
+        except ValueError as exc:
+            print(f"DNS_FAILED: {exc}", file=sys.stderr)
+            return 1
+        label = format_target_display(args.value, ip)
+        return trace_route(ip, label, args.port, timeout_ms)
 
-    except ValueError as error:
-        print(error)
-        return 1
-
-    if (
-        port is not None
-        and not 1 <= port <= 65535
-    ):
-        print(
-            "Port must be between 1 and 65535."
-        )
-
-        return 1
-
-    is_range = (
-        args.target.lower() == "range"
-    )
-
+    is_range = args.target.lower() == "range"
     if is_range:
         if not args.value:
-            print(
-                "Range value is missing."
-            )
-
-            print(
-                "Example: "
-                "taping range 192.168.1.10-20"
-            )
-
+            print("Range is missing. Example: taping range 192.168.1.10-20", file=sys.stderr)
             return 1
-
-        target_text = args.value
-
         try:
-            raw_targets = parse_range(
-                args.value
-            )
-
-        except ValueError as error:
-            print(error)
+            raw_targets = parse_range(args.value)
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
             return 1
-
+        header = args.value
     else:
         if args.value:
-            print(
-                f"Unexpected value: "
-                f"{args.value}"
-            )
-
+            print(f"Unexpected value: {args.value}", file=sys.stderr)
             return 1
-
         raw_targets = [args.target]
-        target_text = args.target
+        header = args.target
 
     stats = new_stats()
     resolved_targets = []
-
     try:
         for target in raw_targets:
-            resolved_ip = resolve_target(
-                target
-            )
-
-            display_target = (
-                format_target_display(
-                    target,
-                    resolved_ip,
-                )
-            )
-
-            resolved_targets.append(
-                (
-                    resolved_ip,
-                    display_target,
-                )
-            )
-
-    except ValueError as error:
-        print_header(
-            target_text,
-            port,
-        )
-
-        if not args.up:
-            print_result(
-                target_text,
-                "DNS_FAILED",
-                str(error),
-            )
-
-        add_stats(
-            stats,
-            False,
-            None,
-        )
-
-        if args.up:
-            print(
-                "No successful results found."
-            )
-
-        print_connection_statistics(
-            stats
-        )
-
-        return 2
+            ip = resolve_target(target)
+            resolved_targets.append((ip, format_target_display(target, ip)))
+    except ValueError as exc:
+        print(f"DNS_FAILED: {exc}", file=sys.stderr)
+        return 1
 
     if not is_range:
-        target_text = (
-            resolved_targets[0][1]
-        )
+        header = resolved_targets[0][1]
+    print_header(header, args.port)
 
-    timeout_ms = get_timeout_ms(args)
-
-    print_header(
-        target_text,
-        port,
-    )
-
-    def run_check_round():
-        for ip, display_target in resolved_targets:
-            if port is not None:
-                success, time_ms = tcp_ping(
-                    ip,
-                    display_target,
-                    port,
-                    timeout_ms,
-                    args.up,
+    def run_round():
+        if is_range and args.port is None:
+            # Cap concurrency to avoid flooding the network with echo probes.
+            # executor.map preserves the original numeric IP order in output.
+            workers = min(RANGE_MAX_WORKERS, len(resolved_targets))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                results = pool.map(
+                    lambda target: probe_icmp_range_host(target[0], timeout_ms),
+                    resolved_targets,
                 )
+                for (ip, label), result in zip(resolved_targets, results):
+                    status, duration, ttl, message, attempts = result
+                    show_icmp_probe_result(label, status, duration, ttl, message, attempts)
+                    add_stats(stats, status == "UP", duration)
+            return
 
+        for ip, label in resolved_targets:
+            if args.port is None:
+                success, duration = icmp_ping(ip, label, timeout_ms)
             else:
-                success, time_ms = icmp_ping(
-                    ip,
-                    display_target,
-                    timeout_ms,
-                    args.up,
-                )
-
-            add_stats(
-                stats,
-                success,
-                time_ms,
-            )
+                success, duration = tcp_ping(ip, label, args.port, timeout_ms)
+            add_stats(stats, success, duration)
 
     try:
         if args.loop:
             while True:
-                round_started_at = time.perf_counter()
-
-                run_check_round()
-
-                wait_for_next_round(
-                    round_started_at,
-                    args.interval,
-                )
-
+                round_started = time.perf_counter()
+                run_round()
+                wait_for_next_round(round_started)
         else:
-            for round_number in range(
-                    args.count
-                ):
-                    round_started_at = time.perf_counter()
-
-                    run_check_round()
-
-                    if (
-                        round_number
-                        < args.count - 1
-                    ):
-                        wait_for_next_round(
-                            round_started_at,
-                            args.interval,
-                        )
-
+            for index in range(args.count):
+                round_started = time.perf_counter()
+                run_round()
+                if index < args.count - 1:
+                    wait_for_next_round(round_started)
     except KeyboardInterrupt:
-        print("")
-
-        print(
-            color(
-                "Break received. Stopping...",
-                Colors.YELLOW,
-            )
-        )
-
+        print(f"\n{color('Break received. Stopping...', Colors.YELLOW)}")
     finally:
-        if (
-            args.up
-            and stats["connected"] == 0
-        ):
-            print(
-                "No successful results found."
-            )
-
-        print_connection_statistics(
-            stats
-        )
-
-    if stats["connected"] > 0:
-        return 0
-
-    return 2
+        print_connection_statistics(stats)
+    return 0 if stats["connected"] else 2
 
 
 if __name__ == "__main__":

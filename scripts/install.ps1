@@ -1,104 +1,66 @@
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
-Write-Host " TAPING installer started" -ForegroundColor Green
-Write-Host " Please wait, installation is running..." -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Green
-Write-Host ""
+$InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\taping'
+$ReleaseUrl = 'https://github.com/HilaliAhmer/taping/releases/latest/download/'
+$ZipUrl = $ReleaseUrl + 'taping-windows-x64.zip'
+$HashUrl = $ReleaseUrl + 'SHA256SUMS'
+$TempDir = Join-Path $env:TEMP ('taping-install-' + [guid]::NewGuid().ToString('N'))
+$TempZip = Join-Path $TempDir 'taping-windows-x64.zip'
+$TempHashes = Join-Path $TempDir 'SHA256SUMS'
+$ExtractDir = Join-Path $TempDir 'extract'
 
-$InstallDir = "C:\taping"
-$ZipUrl = "https://github.com/HilaliAhmer/taping/releases/latest/download/taping-windows-x64.zip"
-$TempRoot = Join-Path $env:TEMP ("taping-install-" + [guid]::NewGuid().ToString())
-$TempZip = Join-Path $TempRoot "taping-windows-x64.zip"
-$TempExtract = Join-Path $TempRoot "extract"
-
-Write-Host "Installing TAPING..." -ForegroundColor Green
-Write-Host "Install directory: $InstallDir" -ForegroundColor Cyan
+Write-Host 'TAPING installer - verifying release files before installation...'
 
 try {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    # Keep other already enabled security protocols; add TLS 1.2.
+    [Net.ServicePointManager]::SecurityProtocol = (
+        [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    )
+    New-Item -ItemType Directory $TempDir -Force | Out-Null
+    New-Item -ItemType Directory $ExtractDir -Force | Out-Null
 
-    New-Item -ItemType Directory -Force $TempRoot | Out-Null
-    New-Item -ItemType Directory -Force $TempExtract | Out-Null
-
-    try {
-        New-Item -ItemType Directory -Force $InstallDir | Out-Null
-    }
-    catch {
-        Write-Host "Cannot create $InstallDir"
-        Write-Host "Please run PowerShell as Administrator and try again."
-        throw
-    }
-
-    Write-Host "Downloading latest TAPING release. This may take a few seconds..." -ForegroundColor Yellow
     Invoke-WebRequest -Uri $ZipUrl -OutFile $TempZip -UseBasicParsing
+    Invoke-WebRequest -Uri $HashUrl -OutFile $TempHashes -UseBasicParsing
 
-    Write-Host "Extracting package..." -ForegroundColor Yellow
-    Expand-Archive -Path $TempZip -DestinationPath $TempExtract -Force
-
-    $PackageDir = Join-Path $TempExtract "taping"
-
-    if (Test-Path $PackageDir) {
-        Copy-Item "$PackageDir\*" $InstallDir -Recurse -Force
+    $Expected = $null
+    foreach ($line in (Get-Content $TempHashes)) {
+        if ($line -match '^([A-Fa-f0-9]{64})\s+\*?taping-windows-x64\.zip\s*$') {
+            $Expected = $Matches[1].ToLowerInvariant()
+            break
+        }
     }
-    else {
-        Copy-Item "$TempExtract\*" $InstallDir -Recurse -Force
-    }
+    if (-not $Expected) { throw 'SHA256SUMS is missing the expected ZIP checksum.' }
 
-    $ExePath = Join-Path $InstallDir "taping.exe"
+    $Actual = (Get-FileHash -Path $TempZip -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($Actual -ne $Expected) { throw 'SHA-256 checksum mismatch. Installation cancelled.' }
+    Write-Host 'Archive SHA-256 verified.' -ForegroundColor Green
 
-    if (-not (Test-Path $ExePath)) {
-        throw "taping.exe was not found after installation."
-    }
-
-    Write-Host "Adding $InstallDir to the beginning of User PATH..."
-
-    $NormalizedInstallDir = $InstallDir.TrimEnd("\")
-    $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-
-    if ([string]::IsNullOrWhiteSpace($UserPath)) {
-        $UserPathItems = @()
-    }
-    else {
-        $UserPathItems = @(
-            $UserPath -split ";" |
-                Where-Object {
-                    $_ -and
-                    $_.Trim().TrimEnd("\") -ne $NormalizedInstallDir
-                }
-        )
+    Expand-Archive -Path $TempZip -DestinationPath $ExtractDir -Force
+    $SourceDir = Join-Path $ExtractDir 'taping'
+    if (-not (Test-Path $SourceDir)) { throw 'Invalid ZIP: taping folder missing.' }
+    if (-not (Test-Path (Join-Path $SourceDir 'taping.exe'))) {
+        throw 'Invalid ZIP: taping.exe missing.'
     }
 
-    $NewUserPath = @(
-        $InstallDir
-    ) + $UserPathItems
+    New-Item -ItemType Directory $InstallDir -Force | Out-Null
+    Copy-Item (Join-Path $SourceDir '*') $InstallDir -Recurse -Force
 
-    [Environment]::SetEnvironmentVariable(
-        "Path",
-        ($NewUserPath -join ";"),
-        "User"
-    )
+    $AppPath = (Resolve-Path $InstallDir).Path.TrimEnd('\')
+    $LegacyPath = 'C:\taping'
+    $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $Existing = @($UserPath -split ';' | Where-Object {
+        $_ -and $_.Trim().TrimEnd('\') -ne $AppPath -and
+        $_.Trim().TrimEnd('\') -ne $LegacyPath
+    })
+    [Environment]::SetEnvironmentVariable('Path', ((@($AppPath) + $Existing) -join ';'), 'User')
 
-    $CurrentPathItems = @(
-        $env:Path -split ";" |
-            Where-Object {
-                $_ -and
-                $_.Trim().TrimEnd("\") -ne $NormalizedInstallDir
-            }
-    )
-
-    $env:Path = (
-        @($InstallDir) + $CurrentPathItems
-    ) -join ";"
-
-    Write-Host ""
-    Write-Host "TAPING installed successfully."
-    Write-Host "Open a new CMD or PowerShell window and run: taping help"
-    Write-Host ""
-
-    & $ExePath help
+    Write-Host "Installed to $AppPath" -ForegroundColor Green
+    Write-Host 'Open a new CMD/PowerShell and run: taping about'
+    Write-Host 'If an old install exists, use: where.exe taping'
+    & (Join-Path $InstallDir 'taping.exe') about
+    if ($LASTEXITCODE -ne 0) { throw 'Installed executable failed smoke test.' }
 }
 finally {
-    Remove-Item $TempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
 }

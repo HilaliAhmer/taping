@@ -16,20 +16,51 @@ The format is based on the principles of Keep a Changelog, and the project uses 
 
 ---
 
+## 0.3.2 — Prepared, not yet published (2026-11-23)
+
+### Added
+
+- `taping trace TARGET` for ICMP route tracing, and `taping trace TARGET -p PORT` for TCP route tracing.
+- Smart ICMP range retries (up to four attempts per IP) and a maximum of eight concurrent range checks.
+- Windows native `IcmpSendEcho` probing to avoid language-dependent `ping.exe` output parsing.
+- Automated tests and cross-platform CI.
+- Release archive checksum and installer checksum verification.
+
+### Fixed
+
+- IPv4 validation for Unicode digits and malformed addresses.
+- Console color escapes leaking into redirected output.
+- Errors go to stderr; invalid command-line arguments use exit code 1, not the unreachable exit code 2.
+- ICMP traceroute no longer trusts the native `tracert` exit code alone to confirm reaching its destination.
+- Duplicate ICMP traceroute heading removed.
+- README, development guide and release package instructions aligned with the current command syntax.
+
+### Changed
+
+- Streamlined options: `-t`/`--loop`, `-w`, `-c`, `-p`, and help.
+- Default Windows installer directory is now `%LOCALAPPDATA%\Programs\taping` for current-user installs.
+- The package version is sourced from `taping/__init__.py`.
+
+### Removed
+
+- `--up`, `-i`/`--interval`, `--version`, and service shortcut flags (`--http`, `--https`, `--ssh`, `--rdp`, `--smb`, `--zebra`, `--winrm`, `--winrms`).
+
+---
+
 ## [0.3.1] - 2026-07-16
 
 ### Added
 
-* Added `-t` as the short option for continuous mode.
-* Added `-w` as the short option for custom timeout values.
+- Added `-t` as the short option for continuous mode.
+- Added `-w` as the short option for custom timeout values.
 
 ### Changed
 
-* Continuous mode now behaves similarly to the Windows `ping -t` command.
-* Kept `--loop` as the long form of `-t`.
-* Kept `--timeout` as the long form of `-w`.
-* Updated command examples and documentation.
-* Standardized the default timeout for ICMP and TCP checks to 4000 milliseconds.
+- Continuous mode now behaves similarly to the Windows `ping -t` command.
+- Kept `--loop` as the long form of `-t`.
+- Kept `--timeout` as the long form of `-w`.
+- Updated command examples and documentation.
+- Standardized the default timeout for ICMP and TCP checks to 4000 milliseconds.
 
 ---
 
@@ -37,20 +68,20 @@ The format is based on the principles of Keep a Changelog, and the project uses 
 
 ### Added
 
-* Added DNS hostname support.
-* Added resolved IPv4 address display for hostnames.
-* Added timestamps to ICMP and TCP result lines.
-* Added configurable check intervals with `-i` and `--interval`.
-* Added a standalone Windows executable.
-* Added a PowerShell installer.
-* Added service shortcuts for common TCP ports.
+- Added DNS hostname support.
+- Added resolved IPv4 address display for hostnames.
+- Added timestamps to ICMP and TCP result lines.
+- Added configurable check intervals with `-i` and `--interval`.
+- Added a standalone Windows executable.
+- Added a PowerShell installer.
+- Added service shortcuts for common TCP ports.
 
 ### Changed
 
-* Improved ICMP ping reliability.
-* Improved timeout behavior.
-* Improved console output formatting.
-* Expanded Windows installation and troubleshooting documentation.
+- Improved ICMP ping reliability.
+- Improved timeout behavior.
+- Improved console output formatting.
+- Expanded Windows installation and troubleshooting documentation.
 
 ---
 
@@ -58,14 +89,14 @@ The format is based on the principles of Keep a Changelog, and the project uses 
 
 ### Added
 
-* Added standalone Windows release assets.
-* Added the `taping-windows-x64.zip` package.
-* Added the `install.ps1` PowerShell installer.
+- Added standalone Windows release assets.
+- Added the `taping-windows-x64.zip` package.
+- Added the `install.ps1` PowerShell installer.
 
 ### Changed
 
-* Improved the help output.
-* Simplified installation for users without Python, pip, or Git.
+- Improved the help output.
+- Simplified installation for users without Python, pip, or Git.
 
 ---
 
@@ -73,8 +104,8 @@ The format is based on the principles of Keep a Changelog, and the project uses 
 
 ### Changed
 
-* Improved TCP range output.
-* TCP range results now display the target IP address and port more clearly.
+- Improved TCP range output.
+- TCP range results now display the target IP address and port more clearly.
 
 ---
 
@@ -82,10 +113,10 @@ The format is based on the principles of Keep a Changelog, and the project uses 
 
 ### Added
 
-* Added colored console output.
-* Added connection statistics.
-* Added successful and failed connection counts.
-* Added minimum, maximum, and average connection times.
+- Added colored console output.
+- Added connection statistics.
+- Added successful and failed connection counts.
+- Added minimum, maximum, and average connection times.
 
 ---
 
@@ -93,11 +124,11 @@ The format is based on the principles of Keep a Changelog, and the project uses 
 
 ### Added
 
-* Initial TAPING command-line application.
-* Added single IPv4 ICMP checks.
-* Added IPv4 range checks.
-* Added TCP port checks.
-* Added basic command-line options.
+- Initial TAPING command-line application.
+- Added single IPv4 ICMP checks.
+- Added IPv4 range checks.
+- Added TCP port checks.
+- Added basic command-line options.
 
 [Unreleased]: https://github.com/HilaliAhmer/taping/compare/v0.3.1...HEAD
 [0.3.1]: https://github.com/HilaliAhmer/taping/compare/v0.3.0...v0.3.1

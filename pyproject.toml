@@ -1,31 +1,34 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "taping"
-version = "0.3.1"
-description = "Tiny range ping and TCP port ping helper for Windows"
+dynamic = ["version"]
+description = "Lightweight ICMP ping, TCP port checks and traceroute"
 requires-python = ">=3.9"
 readme = "README.md"
 license = "MIT"
-authors = [
-{ name = "Selahattin Acikgoz" }
-]
-keywords = ["ping", "tcp", "port", "network", "cli", "windows"]
+authors = [{ name = "Selahattin Acikgoz" }]
+keywords = ["ping", "tcp", "port", "traceroute", "network", "cli", "windows", "linux"]
 classifiers = [
-"Development Status :: 3 - Alpha",
-"Environment :: Console",
-"Intended Audience :: System Administrators",
-"Operating System :: Microsoft :: Windows",
-"Programming Language :: Python :: 3",
-"Programming Language :: Python :: 3.9",
-"Programming Language :: Python :: 3.10",
-"Programming Language :: Python :: 3.11",
-"Programming Language :: Python :: 3.12",
-"Topic :: System :: Networking",
-"Topic :: Utilities",
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Networking",
+    "Topic :: Utilities",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.9,<1"]
 
 [project.urls]
 Homepage = "https://github.com/HilaliAhmer/taping"
@@ -35,7 +38,16 @@ Issues = "https://github.com/HilaliAhmer/taping/issues"
 [project.scripts]
 taping = "taping.cli:main"
 
+[tool.setuptools.dynamic]
+version = { attr = "taping.__version__" }
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["taping*"]
 exclude = ["build*", "dist*", "release*", "scripts*"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

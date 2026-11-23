@@ -1,1 +1,3 @@
-__version__ = "0.3.1"
+"""TAPING network diagnostics utility."""
+
+__version__ = "0.3.2"

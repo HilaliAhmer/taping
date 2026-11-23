@@ -1,361 +1,93 @@
 # TAPING Development Guide
 
-This document explains how to set up the TAPING development environment, test changes, build the Windows executable, and publish a release.
+This document describes the **v0.3.2 source code**. The latest public GitHub Release can still be an earlier version until v0.3.2 is published.
 
-## Requirements
+## Setup
 
-* Windows 10 or Windows 11
-* Python 3.9 or newer
-* pip
-* Git
-* PowerShell
-
-Check the installed versions:
-
-```powershell
-python --version
-python -m pip --version
-git --version
-```
-
-## Clone the Repository
+Use Python 3.11 or later for new development environments (the package retains 3.9+ metadata compatibility). On Windows (PowerShell):
 
 ```powershell
 git clone https://github.com/HilaliAhmer/taping.git
 cd taping
-```
-
-## Create a Virtual Environment
-
-```powershell
 py -m venv .venv
-```
-
-Activate the environment:
-
-```powershell
 .\.venv\Scripts\Activate.ps1
-```
-
-If PowerShell blocks activation, run the following command for the current PowerShell session:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-Then activate the environment again:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-## Install TAPING in Editable Mode
-
-```powershell
-python -m pip install --upgrade pip
 python -m pip install -e .
+python -m pip install -e '.[dev]'
 ```
 
-Editable mode allows changes in the local source code to be used immediately without reinstalling TAPING after each edit.
+Run the source checkout with `python -m taping.cli ...`. All ping, TCP and traceroute application logic lives in `taping/cli.py`. `scripts/entrypoint.py` is only a tiny PyInstaller launcher.
 
-Confirm the development installation:
+## Quick checks
 
 ```powershell
-python -m taping.cli --version
-python -m taping.cli help
-```
-
-## Project Structure
-
-```text
-taping/
-├── taping/
-│   ├── __init__.py
-│   └── cli.py
-├── scripts/
-│   ├── build-release.ps1
-│   └── install.ps1
-├── README.md
-├── DEVELOPMENT.md
-├── CONTRIBUTING.md
-├── CHANGELOG.md
-├── LICENSE
-├── NOTICE
-└── pyproject.toml
-```
-
-The main application code is located in:
-
-```text
-taping/cli.py
-```
-
-The package version is stored in:
-
-```text
-pyproject.toml
-taping/__init__.py
-```
-
-`cli.py` also contains a fallback version for direct execution. All version values must match before publishing a release.
-
-## Basic Validation
-
-Check the Python syntax:
-
-```powershell
-python -m py_compile .\taping\cli.py
-```
-
-Test the version and help commands:
-
-```powershell
-python -m taping.cli --version
-python -m taping.cli help
 python -m taping.cli about
-```
-
-## Functional Tests
-
-### ICMP Tests
-
-```powershell
-python -m taping.cli 8.8.8.8
-python -m taping.cli 8.8.8.8 -c 5
-python -m taping.cli google.com -c 3
-python -m taping.cli google.com -w 2000
-```
-
-### Continuous Mode
-
-```powershell
-python -m taping.cli google.com -t
-```
-
-Stop continuous mode with `CTRL+C`.
-
-### TCP Tests
-
-```powershell
+python -m taping.cli help
+python -m taping.cli 8.8.8.8 -c 3
 python -m taping.cli google.com -p 443
-python -m taping.cli google.com --https
-python -m taping.cli 192.168.1.10 --rdp
-```
-
-### Range Tests
-
-```powershell
 python -m taping.cli range 192.168.1.1-10
-python -m taping.cli range 192.168.1.1-10 --up
 python -m taping.cli range 192.168.1.1-10 -p 3389
+python -m taping.cli trace 8.8.8.8
+python -m taping.cli trace google.com -p 443
 ```
 
-### Parameter Validation
+`-t` runs continuously until Ctrl+C; `-c` sets rounds; `-w` sets the per-attempt timeout. TCP traceroute requires elevated privileges on Windows or root/CAP_NET_RAW on Linux. On Linux, install `ping` and `traceroute` if not present.
 
-Confirm that TAPING rejects invalid values:
+Invalid input should return 1, unreachable/no successful checks 2, success 0. Example validation:
 
 ```powershell
 python -m taping.cli 8.8.8.8 -c 0
 python -m taping.cli 8.8.8.8 -w 50
 python -m taping.cli 8.8.8.8 -p 70000
 python -m taping.cli range 192.168.1.20-10
-python -m taping.cli 8.8.8.8 -p 443 --https
 ```
 
-## Building the Windows Release
-
-Activate the virtual environment:
+## Automated tests and style
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
+python -m pytest -q
+python -m ruff check taping tests scripts/entrypoint.py
+python -m compileall -q taping scripts/entrypoint.py
 ```
 
-Run the build script:
+CI runs these on Windows and Ubuntu. Synthetic tests cover range retries, argument/exit codes, route reply parsing, Unicode IPv4 validation, and stdout color behavior. Network and raw-socket tests still need manual validation on real Windows machines.
+
+## Build a standalone Windows executable
 
 ```powershell
+python -m pip install -r .\requirements-build.txt
 powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
 ```
 
-The script will:
-
-1. Remove old `build`, `dist`, and `release` directories.
-2. Install or verify PyInstaller.
-3. Build `taping.exe`.
-4. Create the standalone package.
-5. Copy the installer into the release directory.
-
-The generated release files are:
+The script builds **onefile without UPX**, tests `taping.exe about`, creates a ZIP using `/` separators, and writes a SHA-256 checksum. Release assets:
 
 ```text
 release/
-├── taping/
-│   ├── taping.exe
-│   ├── README.md
-│   ├── README.txt
-│   ├── LICENSE
-│   └── NOTICE
-├── taping-windows-x64.zip
-└── install.ps1
+  taping/
+    taping.exe
+    README.md
+    README.txt
+    LICENSE
+    NOTICE
+  taping-windows-x64.zip
+  SHA256SUMS
+  install.ps1
 ```
 
-## Testing the Generated Executable
-
-Check the generated version:
+To test the packaged application:
 
 ```powershell
-.\release\taping\taping.exe --version
-```
-
-Show the help screen:
-
-```powershell
+.\release\taping\taping.exe about
 .\release\taping\taping.exe help
-```
-
-Test ICMP:
-
-```powershell
 .\release\taping\taping.exe 8.8.8.8 -c 3
+.\release\taping\taping.exe trace 8.8.8.8
 ```
 
-Test DNS hostname resolution:
+Test TCP traceroute separately using an Administrator terminal. Windows EXE build and installer cannot be fully verified on Linux; test both before publishing.
 
-```powershell
-.\release\taping\taping.exe google.com -c 3
-```
+## Publishing
 
-Test TCP:
+Update `taping/__init__.py` to change the version; setuptools reads it dynamically. Update `CHANGELOG.md` and README's version note. Only after testing and building should you commit, tag and publish a GitHub Release.
 
-```powershell
-.\release\taping\taping.exe google.com --https
-```
+Upload **all three** files from `release/`: `taping-windows-x64.zip`, `SHA256SUMS`, and `install.ps1`. The installer verifies the downloaded ZIP against `SHA256SUMS`. Since both are published from the same release, this protects against accidental corruption but is not an independent signature.
 
-Test an IPv4 range:
-
-```powershell
-.\release\taping\taping.exe range 192.168.1.1-10 --up
-```
-
-Test continuous mode:
-
-```powershell
-.\release\taping\taping.exe google.com -t
-```
-
-Stop the test with `CTRL+C`.
-
-## Preparing a New Version
-
-Update the version number in all of the following files:
-
-```text
-pyproject.toml
-taping/__init__.py
-taping/cli.py
-```
-
-Example:
-
-```toml
-version = "0.4.0"
-```
-
-```python
-__version__ = "0.4.0"
-```
-
-Update `CHANGELOG.md` with the changes included in the new release.
-
-Then verify the version:
-
-```powershell
-python -m taping.cli --version
-```
-
-Build the release again:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1
-```
-
-Confirm that the generated executable reports the same version:
-
-```powershell
-.\release\taping\taping.exe --version
-```
-
-## Release Checklist
-
-Before publishing a release, confirm that:
-
-* Python syntax validation succeeds.
-* The Python module reports the correct version.
-* The standalone executable reports the correct version.
-* ICMP checks work.
-* DNS hostname checks work.
-* TCP checks work.
-* IPv4 range checks work.
-* Service shortcuts work.
-* `-t` continuous mode works.
-* `-c` count works.
-* `-w` timeout works.
-* `-i` interval works.
-* `--up` filtering works.
-* Invalid parameters return readable errors.
-* The release ZIP contains the expected files.
-* The PowerShell installer downloads the correct release.
-* `CHANGELOG.md` is updated.
-* The Git working tree is clean.
-
-Check the working tree:
-
-```powershell
-git status
-```
-
-## Publishing a GitHub Release
-
-Commit the release changes:
-
-```powershell
-git add .
-git commit -m "Prepare TAPING v0.4.0"
-git push origin main
-```
-
-Create an annotated tag:
-
-```powershell
-git tag -a v0.4.0 -m "TAPING v0.4.0"
-git push origin v0.4.0
-```
-
-Create a GitHub Release using the same tag.
-
-Upload these files:
-
-```text
-release/taping-windows-x64.zip
-release/install.ps1
-```
-
-Mark the release as the latest release.
-
-The GitHub release notes should summarize the relevant sections from `CHANGELOG.md`.
-
-## Cleaning the Development Environment
-
-Remove generated build files:
-
-```powershell
-Remove-Item .\build -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item .\dist -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item .\release -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item .\taping.spec -Force -ErrorAction SilentlyContinue
-```
-
-Deactivate the Python virtual environment:
-
-```powershell
-deactivate
-```
+Do not publish or push untested changes to `main`. Check `git status` and use a separate branch if desired.
